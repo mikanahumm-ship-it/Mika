@@ -56,6 +56,7 @@ function selectTool(id) {
   game.setTool(id); game.audio.ui(); renderToolbar(); renderToolSheet();
   const t = game.tool;
   $('#sizeWrap').classList.toggle('hidden', t.kind === 'knife');
+  $('#thickWrap').classList.toggle('hidden', t.kind === 'knife');
   $('#tiltWrap').classList.toggle('hidden', t.kind !== 'knife' || game.mode !== 'vertical');
   $$('[data-mode]').forEach(b => b.classList.toggle('hidden', t.kind !== 'knife'));
 }
@@ -196,8 +197,9 @@ $$('[data-guide]').forEach(b => b.onclick = () => {
   if (game.guide !== 'free' && game.mode === 'view') { game.mode = 'vertical'; $$('[data-mode]').forEach(x => x.classList.toggle('on', x.dataset.mode === 'vertical')); $('#tiltWrap').classList.remove('hidden'); }
   toast({ free: 'Free cuts follow your finger', long: 'Straight cuts along the length', cross: 'Straight cuts across' }[game.guide]);
 });
+$('#thick').oninput = (e) => { const v = +e.target.value / 100; ui.depthScale = v; $('#thickVal').textContent = `${v.toFixed(1)}×`; };
 $('#tilt').oninput = (e) => { game.tilt = +e.target.value; $('#tiltVal').textContent = `${game.tilt}°`; };
-$('#size').oninput = (e) => { const v = +e.target.value / 100; ui.widthScale = v; ui.depthScale = Math.sqrt(v); $('#sizeVal').textContent = `${v.toFixed(1)}×`; };
+$('#size').oninput = (e) => { const v = +e.target.value / 100; ui.widthScale = v; game.setTool(game.toolId); $('#sizeVal').textContent = `${v.toFixed(1)}×`; };
 
 const S = game.settings;
 function bindSettings() {

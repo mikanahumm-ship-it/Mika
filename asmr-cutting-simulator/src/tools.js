@@ -11,8 +11,8 @@ export const TOOLS = [
   { id: 'bread', name: 'Bread Knife', kind: 'knife', len: 1.9, h: 0.32, prof: 'bread', weight: 0.9, pitch: 1, push: 0.8, saw: true },
   { id: 'precision', name: 'Precision Blade', kind: 'knife', len: 0.75, h: 0.18, prof: 'scalpel', weight: 0.5, pitch: 1.35, push: 0.4 },
   { id: 'soapcutter', name: 'Soap Cutter', kind: 'knife', len: 1.2, h: 0.55, prof: 'soap', weight: 1.2, pitch: 0.95, push: 1.1 },
-  { id: 'wire', name: 'Wire Cutter', kind: 'knife', len: 1.6, h: 0.9, prof: 'wire', weight: 0.6, pitch: 1.5, push: 0.6, whistle: true },
-  { id: 'shaver', name: 'Soap Shaver', kind: 'shave', len: 0.7, h: 0.3, prof: 'shaver', weight: 0.6, pitch: 1.1, width: 0.36, depth: 0.045 },
+  { id: 'wire', name: 'Wire Cutter', kind: 'knife', kerf: 0.014, len: 1.6, h: 0.9, prof: 'wire', weight: 0.6, pitch: 1.5, push: 0.6, whistle: true },
+  { id: 'shaver', name: 'Peeler', kind: 'shave', len: 0.7, h: 0.3, prof: 'shaver', weight: 0.6, pitch: 1.1, width: 0.36, depth: 0.045 },
   { id: 'carver', name: 'Carving Gouge', kind: 'carve', len: 0.6, h: 0.16, prof: 'gouge', weight: 0.6, pitch: 1, width: 0.14, depth: 0.14 },
   { id: 'crinkle', name: 'Crinkle Cutter', kind: 'knife', len: 1.1, h: 0.4, prof: 'crinkle', weight: 1, pitch: 1.05, push: 1, path: 'zigzag', unlock: 25 },
   { id: 'wave', name: 'Wave Blade', kind: 'knife', len: 1.4, h: 0.38, prof: 'chef', weight: 1, pitch: 1, push: 1, path: 'wave', unlock: 60 },
@@ -66,11 +66,11 @@ function damascus() {
 
 // Builds a knife model. Local frame: origin at the blade's cutting point,
 // +X along the blade (stroke direction), +Y up (spine), Z = blade normal.
-export function buildToolModel(tool, finishId, handleId) {
+export function buildToolModel(tool, finishId, handleId, opts) {
   const fin = FINISHES.find(f => f.id === (tool.finish || finishId)) || FINISHES[0];
   const han = HANDLES.find(h => h.id === handleId) || HANDLES[0];
   const g = new THREE.Group();
-  const bladeMat = new THREE.MeshStandardMaterial({ color: fin.color, metalness: fin.metal, roughness: fin.rough, envMapIntensity: 1.4 });
+  const bladeMat = new THREE.MeshStandardMaterial({ color: fin.color, metalness: fin.metal, roughness: fin.rough, envMap: (opts && opts.env) || null, envMapIntensity: 2.6 });
   if (fin.pattern) { bladeMat.map = damascus(); bladeMat.color.set('#ffffff'); }
   const handleMat = new THREE.MeshStandardMaterial({ color: han.color, roughness: 0.55, metalness: 0 });
   const L = tool.len, H = tool.h;
@@ -84,17 +84,22 @@ export function buildToolModel(tool, finishId, handleId) {
     g.userData.edge = 0; return g;
   }
   if (tool.prof === 'shaver' || tool.prof === 'gouge') {
-    const w = tool.width;
-    const head = tool.prof === 'shaver'
-      ? new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, w), bladeMat)
-      : new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, 0.22, 16, 1, true, 0, Math.PI), bladeMat);
-    if (tool.prof === 'gouge') { head.material = bladeMat.clone(); head.material.side = THREE.DoubleSide; head.rotation.z = Math.PI / 2; head.rotation.x = Math.PI; head.position.y = w / 2; }
-    else head.position.y = 0.02;
-    g.add(head);
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.35, 8), bladeMat);
-    shaft.rotation.z = -Math.PI / 3.2; shaft.position.set(-0.17, 0.12, 0); g.add(shaft);
-    const handle = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.36, 6, 12), handleMat);
-    handle.rotation.z = -Math.PI / 3.2; handle.position.set(-0.42, 0.32, 0); g.add(handle);
+    // Peeling blade: the cutting edge sits at the origin; a thin plate rises
+    // forward from it at a rake angle (shavings ride up its top face and roll
+    // over), and the handle angles back toward the player.
+    const w = (opts && opts.width) || tool.width, rake = 0.5, plateL = 0.16;
+    const plateGeo = tool.prof === 'shaver'
+      ? new THREE.BoxGeometry(plateL, 0.012, w)
+      : new THREE.CylinderGeometry(w / 2, w / 2, plateL, 18, 1, true, Math.PI / 2, Math.PI);
+    if (tool.prof === 'gouge') plateGeo.rotateZ(-Math.PI / 2);
+    plateGeo.translate(plateL / 2, tool.prof === 'gouge' ? w / 2 : 0.006, 0);
+    plateGeo.rotateZ(rake);
+    const pm = bladeMat.clone(); pm.side = THREE.DoubleSide;
+    const plate = new THREE.Mesh(plateGeo, pm); plate.castShadow = true; g.add(plate);
+    const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.1, 12), bladeMat);
+    ferrule.rotation.z = -1.1; ferrule.position.set(-0.04, 0.05, 0); g.add(ferrule);
+    const handle = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.24, 6, 14), handleMat);
+    handle.rotation.z = -1.1; handle.position.set(-0.18, 0.14, 0); handle.castShadow = true; g.add(handle);
     return g;
   }
   const shape = new THREE.Shape(profile(tool.prof, L, H).map(([x, y]) => new THREE.Vector2(x, y)));

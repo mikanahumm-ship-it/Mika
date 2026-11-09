@@ -6,6 +6,7 @@ import { OBJECTS, byId } from './catalog.js';
 import { TOOLS, buildToolModel } from './tools.js';
 import { Audio } from './audio.js';
 import { Particles } from './particles.js';
+import { installLive } from './live.js';
 
 const GRAVITY = 55;          // world units are ~10 cm; slightly dreamy gravity
 const BOARD = { hx: 3.6, hz: 2.4, h: 0.28 };
@@ -53,6 +54,15 @@ class Physics {
     if (ang) rb.setAngvel({ x: ang.x, y: ang.y, z: ang.z }, true);
     return { rb };
   }
+  createHull(points, pos) {
+    if (!this.ok) return { sim: true, pos: pos.clone(), quat: new THREE.Quaternion(), vel: new THREE.Vector3() };
+    const R = this.R;
+    const rb = this.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setLinearDamping(0.4).setAngularDamping(1.5));
+    const cd = R.ColliderDesc.convexHull(new Float32Array(points));
+    if (cd) this.world.createCollider(cd.setFriction(0.9).setRestitution(0.05).setDensity(0.4), rb);
+    else this.world.createCollider(R.ColliderDesc.ball(0.05).setDensity(0.4), rb);
+    return { rb };
+  }
   remove(h) { if (h.rb) this.world.removeRigidBody(h.rb); }
   read(h, pos, quat) {
     if (h.sim) { pos.copy(h.pos); quat.copy(h.quat); return; }
@@ -98,10 +108,13 @@ function hullPoints(part) {
 }
 
 // ============================================================ mesh building
+// Groups: 0 = outer surface, 1 = knife/peel cut surface, 2 = internal glue
+// faces (drawn with a depth offset so they never show as seams at the surface,
+// but still render where they are exposed, e.g. the walls of a groove).
 function buildGeometry(parts) {
-  const P = [[], []], N = [[], []];
+  const P = [[], [], []], N = [[], [], []];
   for (const part of parts) for (const f of part.faces) {
-    const g = f.type === 0 ? 0 : 1;
+    const g = f.type === 0 ? 0 : f.type === 1 ? 1 : 2;
     const p = f.pts, m = p.length / 3, nr = f.nrm;
     const fn = f.plane ? f.plane.n : null;
     for (let i = 1; i < m - 1; i++) for (const k of [0, i, i + 1]) {
@@ -112,23 +125,34 @@ function buildGeometry(parts) {
     }
   }
   const geo = new THREE.BufferGeometry();
-  const pos = new Float32Array(P[0].length + P[1].length); pos.set(P[0]); pos.set(P[1], P[0].length);
-  const nrm = new Float32Array(N[0].length + N[1].length); nrm.set(N[0]); nrm.set(N[1], N[0].length);
+  const total = P[0].length + P[1].length + P[2].length;
+  const pos = new Float32Array(total), nrm = new Float32Array(total);
+  let off = 0;
+  for (let g = 0; g < 3; g++) {
+    pos.set(P[g], off); nrm.set(N[g], off);
+    geo.addGroup(off / 3, P[g].length / 3, g === 2 ? 2 : g);
+    off += P[g].length;
+  }
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-  geo.addGroup(0, P[0].length / 3, 0);
-  geo.addGroup(P[0].length / 3, P[1].length / 3, 1);
   geo.computeBoundingSphere(); geo.computeBoundingBox();
   return geo;
 }
 
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion();
 
+export function bodyMaterials(def, shared) {
+  const glue = makeMaterial(def.in, def.mat, shared);
+  glue.polygonOffset = true; glue.polygonOffsetFactor = 2; glue.polygonOffsetUnits = 2;
+  return [makeMaterial(def.out, def.mat, shared), makeMaterial(def.in, def.mat, shared), glue];
+}
+
 // ============================================================ the game
 export class Game {
   constructor(canvas, ui) {
     this.canvas = canvas; this.ui = ui;
     this.bodies = [];
+    this.curls = [];
     this.undoStack = [];
     this.audio = new Audio();
     this.time = { value: 0 };
@@ -150,7 +174,7 @@ export class Game {
   async init() {
     const r = this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' });
     r.outputColorSpace = THREE.SRGBColorSpace;
-    r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
+    r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 0.95;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
     this.applyQuality();
     const scene = this.scene = new THREE.Scene();
@@ -158,7 +182,7 @@ export class Game {
     scene.fog = new THREE.Fog('#ece5dc', 16, 34);
     const pm = new THREE.PMREMGenerator(r);
     scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.55;
+    scene.environmentIntensity = 0.5;
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 80);
 
     const hemi = new THREE.HemisphereLight('#fff8f0', '#d8c8b8', 0.9); scene.add(hemi);
@@ -229,7 +253,7 @@ export class Game {
     const geo = buildGeometry(parts);
     const uni = { wob: { value: 0 }, base: { value: geo.boundingBox.min.y }, height: { value: geo.boundingBox.max.y - geo.boundingBox.min.y } };
     const shared = { wob: uni.wob, time: this.time, base: uni.base, height: uni.height };
-    const mats = [makeMaterial(def.out, def.mat, shared), makeMaterial(def.in, def.mat, shared)];
+    const mats = bodyMaterials(def, shared);
     const mesh = new THREE.Mesh(geo, mats);
     mesh.castShadow = true; mesh.receiveShadow = true;
     this.scene.add(mesh);
@@ -245,7 +269,7 @@ export class Game {
     b.mesh.geometry.dispose(); for (const m of b.mesh.material) m.dispose();
     this.bodies.splice(this.bodies.indexOf(b), 1);
   }
-  clearAll() { while (this.bodies.length) this.removeBody(this.bodies[0]); this.particles.clear(); }
+  clearAll() { while (this.bodies.length) this.removeBody(this.bodies[0]); while (this.curls.length) this.removeCurl(this.curls[0]); this.particles.clear(); }
 
   spawn(id, drop = true) {
     const def = byId[id] || OBJECTS[0];
@@ -269,6 +293,7 @@ export class Game {
   pushUndo() { this.undoStack.push(this.snapshot()); if (this.undoStack.length > 30) this.undoStack.shift(); this.ui.onUndo(this.undoStack.length); }
   undo() {
     const s = this.undoStack.pop(); if (!s) return;
+    if (s.curls !== undefined) while (this.curls.length > s.curls) this.removeCurl(this.curls[this.curls.length - 1]);
     while (this.bodies.length) this.removeBody(this.bodies[0]);
     for (const e of s) this.addBody(e.def, e.parts, e.p, e.q);
     this.audio.ui(); this.ui.onUndo(this.undoStack.length);
@@ -406,7 +431,7 @@ export class Game {
       for (const comp of comps) {
         let V = 0; const c = new THREE.Vector3();
         for (const p of comp) { const mp = p.massProps(); V += mp.V; c.addScaledVector(_v.set(...mp.c), mp.V); }
-        if (V < 6e-5 && comps.length > 1) { // tiny crumb -> particle
+        if (V < 2e-4 && comps.length > 1) { // tiny crumb -> particle
           const wc = c.divideScalar(Math.max(V, 1e-9)).applyQuaternion(quat).add(pos);
           this.particles.spawn(def.fx === 'juice' || def.fx === 'none' ? 'crumb' : def.fx, wc, new THREE.Vector3(0, 0.5, 0), surfColor(def.in));
           continue;
@@ -481,7 +506,8 @@ export class Game {
       this.gesture = { orbit: true }; return;
     }
     if (this.grabMode) { this.beginGrab(e); return; }
-    this.beginStroke(e);
+    for (const b of this.bodies) b.wbox = null;
+    if (this.liveActive()) this.liveBegin(e); else this.beginStroke(e);
   }
   onMove(e) {
     const p = this.pointers.get(e.pointerId); if (!p) return;
@@ -500,13 +526,13 @@ export class Game {
       return;
     }
     if (this.grab) { this.moveGrab(e); return; }
-    if (this.stroke) this.moveStroke(e);
+    if (this.stroke) { if (this.stroke.live) this.liveMove(e); else this.moveStroke(e); }
   }
   onUp(e, cancel) {
     this.pointers.delete(e.pointerId);
     if (this.gesture) { if (this.pointers.size === 0) this.gesture = null; else this.gesture.d = 0; return; }
     if (this.grab) { this.endGrab(); return; }
-    if (this.stroke) { if (cancel) this.cancelStroke(); else this.endStroke(); }
+    if (this.stroke) { if (this.stroke.live) this.liveEnd(); else if (cancel) this.cancelStroke(); else this.endStroke(); }
   }
 
   get tool() { return TOOLS.find(t => t.id === this.toolId); }
@@ -754,7 +780,7 @@ export class Game {
   setTool(id) {
     this.toolId = id;
     if (this.knife) this.scene.remove(this.knife);
-    this.knife = buildToolModel(this.tool, this.finish, this.handle);
+    this.knife = buildToolModel(this.tool, this.finish, this.handle, { width: (this.tool.width || 0) * (this.ui.widthScale || 1), env: this.scene.environment });
     this.knife.visible = false; this.knife.traverse(o => { o.castShadow = true; });
     this.scene.add(this.knife);
     this.savePrefs();
@@ -844,7 +870,7 @@ export class Game {
     this.camera.lookAt(c.target);
 
     if (this.grab) this.stepGrab();
-    this.strokeTick();
+    if (this.stroke && this.stroke.live) this.liveUpdate(rdt); else this.strokeTick();
     this.physics.step(rdt, scale);
     for (const b of [...this.bodies]) {
       if (b.h.sim) this.physics.simStep(b.h, dt);
@@ -853,12 +879,13 @@ export class Game {
       if (b.wobV > 0.0005) { b.wobV *= Math.pow(0.12, dt); b.uni.wob.value = b.wobV * 0.08; } else b.uni.wob.value = 0;
     }
     this.particles.update(dt);
+    for (const c of this.curls) if (c.h) { this.physics.read(c.h, c.mesh.position, c.mesh.quaternion); }
     // continuous scraping sound while blade moves through material
     if (this.stroke && this.settings.sound) {
       const s = this.stroke; const idle = performance.now() - s.pts[s.pts.length - 1].t > 90;
       if (s.inMat && !idle) this.audio.scrape(s.inMat.def.snd, s.speed * 3, rdt, this.tool);
     }
-    this.poseKnife(rdt);
+    if (!(this.stroke && this.stroke.live)) this.poseKnife(rdt);
     if (!this.stroke && this.trail.visible) { this.trail.material.opacity *= Math.pow(0.02, rdt); if (this.trail.material.opacity < 0.02) this.trail.visible = false; }
     this.renderer.render(this.scene, this.camera);
   }
@@ -892,4 +919,5 @@ function rdp(P, eps) {
   return [P[0], P[P.length - 1]];
 }
 
+installLive(Game, { buildGeometry, bodyMaterials });
 export { Part };

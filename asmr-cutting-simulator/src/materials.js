@@ -122,12 +122,12 @@ function key(spec) { return 'asmr_' + spec.pat; }
 
 // Make a material for one surface (outer or inner) of an object definition.
 // Each cluster mesh gets its own clone so wobble uniforms are per piece.
-export function makeMaterial(surf, matProps, shared) {
+export function makeMaterial(surf, matProps, shared, opts = {}) {
   const base = {
     color: 0xffffff,
     roughness: surf.rough ?? matProps.rough ?? 0.6,
     metalness: 0,
-    side: THREE.FrontSide,
+    side: opts.double ? THREE.DoubleSide : THREE.FrontSide,
   };
   let m;
   const physical = matProps.clearcoat || matProps.sheen || matProps.opacity < 1;
@@ -162,6 +162,7 @@ export function makeMaterial(surf, matProps, shared) {
     uWobBase: shared.base,      // per-cluster base y
     uWobH: shared.height,
   };
+  if (opts.double) m.shadowSide = THREE.FrontSide; // thin double-sided strips: avoid self-shadow acne
   m.userData.u = u;
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
@@ -170,9 +171,10 @@ export function makeMaterial(surf, matProps, shared) {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         varying vec3 vMPos; varying vec3 vMNrm;
+        ${opts.mpos ? 'attribute vec3 mpos;' : ''}
         uniform float uWobA; uniform float uWobT; uniform float uWobBase; uniform float uWobH;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        vMPos = position; vMNrm = normal;
+        vMPos = ${opts.mpos ? 'mpos' : 'position'}; vMNrm = normal;
         if (uWobA > 0.0001) {
           float hh = clamp((position.y - uWobBase) / max(uWobH, .01), 0., 1.);
           float w = sin(uWobT*21.) * uWobA * hh;
@@ -185,7 +187,7 @@ export function makeMaterial(surf, matProps, shared) {
       .replace('#include <color_fragment>', `#include <color_fragment>
         diffuseColor.rgb *= patColor(vMPos);`);
   };
-  m.customProgramCacheKey = () => key(surf) + (physical ? 'p' : 's') + (surf.emissive ? 'e' : '');
+  m.customProgramCacheKey = () => key(surf) + (physical ? 'p' : 's') + (surf.emissive ? 'e' : '') + (opts.mpos ? 'm' : '');
   return m;
 }
 

@@ -38,24 +38,29 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 
 ## How the cutting works
 
-- **Convex-part kernel** (`src/geometry.js`). Every object is a set of convex polyhedra. Splitting a convex part with a plane is exact and robust, and gives two convex parts plus a cap polygon.
-- **Your stroke becomes cutting planes.**
-  - The screen path is simplified (RDP) and projected onto the object surface.
-  - Each segment becomes a plane, bounded at its ends by bisector planes, so curved strokes cut along the path you drew as a chain of short straight segments.
-  - The zigzag and wave tools change the path itself, so the crinkle cut is real geometry.
-- **Partial cuts and connectivity.**
-  - Bounding a cut needs extra "glue" splits, which are internal faces that keep parts bonded.
-  - After every cut, a connectivity pass (glue faces that overlap on the same plane) works out which parts are still attached.
-  - A stroke that stops halfway leaves a real slit that stays attached. The pieces only separate once they are fully cut through.
-- **Shaving and carving** clip the material under the stroke to a band of the chosen width, then cut it at a depth below the local top surface. The chip is removed and turns into shavings in proportion to its volume. Repeated strokes go deeper.
-- **Volumetric materials** (`src/materials.js`). Colour comes from the 3D position inside the object (marbling, layers, fruit flesh/pith/seeds, citrus segments, crumb, sand grain …). A cut face always shows the inside that matches where it is.
-- **Physics** (`vendor/rapier.es.js`). Every piece is a Rapier rigid body with convex-hull colliders. Thin slices topple, cubes tumble, and the hand tool lets you push pieces around.
-- **Audio** (`src/audio.js`). All sound is synthesised from filtered noise grains and short tonal bodies, with a profile per material (wet meat, crisp soap, crunchy vegetables, granular sand, crackling ice, jelly bloops …). It is generated while the blade moves through material, at a rate set by your speed. There are no sound files and no music.
+- **Live cutting** (`src/live.js`). The object's geometry changes every frame while you drag, under the blade.
+  - **Knife tools** carve a thin slot (the blade's kerf) that follows your path. Once the slot fully crosses a piece, the connectivity check finds two separate parts and the piece falls away with physics, mid-stroke.
+  - **Peeler and gouge** remove a strip of chosen width and thickness below the local top surface. The removed strip turns into a curl, peel, drape, chunk or crumbs, depending on the material.
+- **The blade sits in the cut.**
+  - The knife's tip leads at the cut front, with its edge at the slot floor.
+  - Starting on top of an object, the blade presses in as it travels, so the slot is a real ramp at first. Arriving from the side, it slides in at board level.
+  - On release, any shallow part is pushed through.
+  - The blade follows your finger with resistance that depends on the material, so jelly is slick and ice is stubborn.
+- **Curls are real removed material.** Each curl sample remembers the 3D position inside the object it was shaved from, and the curl is shaded with the same volumetric material. Layered soap gives striped curls, and cucumber peel is green on the outside and pale on the inside. Curls grow while attached to the blade, then roll off as physics bodies when you lift your finger. Chocolate curls snap off as they grow.
+- **Material behaviour** comes from each object's tags (`behavior()` in `src/live.js`). It sets the style (curl, peel, drape, chunk or crumble), blade resistance, press-in speed, curl radius, brittleness and how much the object wobbles while cut. Any object can override it with a `live` field in the catalog.
+- **Clean geometry.**
+  - **Convex-part kernel** (`src/geometry.js`). Every object is a set of convex polyhedra. Splitting a convex part with a plane is exact, and non-convex results like slots and grooves are kept as convex parts glued together by internal faces.
+  - **Rebuilt every frame.** While you cut, each touched body is rebuilt from its shape at the start of the stroke plus the blade's path simplified into straight lines (RDP). A long stroke stays a handful of parts, with no seams or slow-down. Each straight line is split only by depth, so all its sections share the same side planes and their internal faces line up exactly.
+- **Guides**: Lengthwise and Across lock the blade to a straight line along or across the piece's long axis. On release the cut is completed in both directions through the whole piece.
+- **Volumetric materials** (`src/materials.js`). Colour comes from the 3D position inside the object (marbling, layers, fruit flesh and seeds, citrus segments, crumb, sand grain …), so every new surface shows the matching inside.
+- **Physics** (`vendor/rapier.es.js`). Pieces and curls are Rapier rigid bodies with convex-hull colliders.
+- **Audio** (`src/audio.js`). Sound is synthesised from noise grains with a profile per material. It plays while the blade is actually in material, at a rate set by blade speed.
 
 ## Honest limitations
 
-- Cuts go straight down through the whole object, like pressing a knife to the board. You can't stop the blade halfway down. For horizontal or depth-limited cuts, use Follow view or the shaver and gouge.
-- Curved strokes are cut as chains of short planar segments, which looks smooth at normal stroke speeds.
+- Knife slots go down to the board once the blade has pressed in. For horizontal or depth-limited cuts, use Follow view or the peeler and gouge.
+- Curved strokes are cut as chains of short straight sections (within about 4 mm of the path for knives and 8 mm for peelers).
+- Curls are generated along the path of the removed strip. They don't collide with the object while still attached to the blade.
 - Base shapes are convex: boxes, rounded bars, cylinders, ellipsoids, domes, capsules and wedges. Objects with real holes, like a bagel ring or Swiss-cheese holes, use shading instead of geometry.
 - Jelly, slime, clay and other soft materials are rigid bodies. Their wobble is a vertex-shader effect, not a soft-body simulation.
 - Cut faces are flat. Fibrous tearing, crumbling and squishing are suggested with particles and sound only.
@@ -67,7 +72,8 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 ```
 index.html, style.css      UI shell (minimal glass interface, bottom sheets)
 src/main.js                UI controller, menus, 3D thumbnails, settings
-src/game.js                scene, physics bridge, input, cutting operations, camera, undo
+src/game.js                scene, physics bridge, input, camera, undo, follow-view cuts
+src/live.js                live cutting engine: blade path, slots, peeling, curls, material behaviour
 src/geometry.js            convex part kernel: split, caps, connectivity, shape generators
 src/materials.js           procedural volumetric shaders (15 patterns)
 src/catalog.js             131 object definitions (data only — add objects here)

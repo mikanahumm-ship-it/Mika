@@ -43,6 +43,7 @@
       <button data-guide="cross" class="seg" aria-label="Cut across"><svg viewBox="0 0 20 12" width="18" height="11"><rect x="1" y="1" width="18" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="10" y1="1" x2="10" y2="11" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.5"/></svg> Across</button>
       <div class="slider" id="tiltWrap"><span>Tilt</span><input id="tilt" type="range" min="-50" max="50" value="0" step="1"><b id="tiltVal">0°</b></div>
       <div class="slider hidden" id="sizeWrap"><span>Width</span><input id="size" type="range" min="40" max="220" value="100" step="5"><b id="sizeVal">1×</b></div>
+      <div class="slider hidden" id="thickWrap"><span>Thickness</span><input id="thick" type="range" min="30" max="300" value="100" step="10"><b id="thickVal">1×</b></div>
     </div>
     <div class="toolbar" id="toolbar"></div>
   </footer>
@@ -80,9 +81,10 @@
       <label class="row"><span>High quality graphics</span><input type="checkbox" id="optQuality" class="toggle"></label>
       <details class="about">
         <summary>How cutting works &amp; limitations</summary>
-        <p>Every object is real geometry. Your stroke is turned into cutting planes that follow the path you drew, and the mesh is split exactly along them — pieces you see are the actual result, never a canned animation. Curved strokes are cut as a chain of short straight segments. A stroke that stops inside an object leaves a slit; pieces only fall apart once they are fully separated.</p>
-        <p>The blade cuts all the way down through the object (like pressing a knife to the board). Use <b>Tilt</b> for angled cuts, or <b>Follow view</b> with a low camera to cut horizontally or at any angle.</p>
-        <p>Pieces are rigid bodies with real physics. Soft materials (jelly, slime, clay) wobble visually but are not simulated as true soft bodies. Shavers and gouges remove material as real geometry and turn it into shavings.</p>
+        <p>Every object is real geometry, and it changes shape while you drag. The knife carves a thin slot that follows your finger, and a piece falls away the moment the slot fully crosses it. The peeler removes a strip under the blade, and that strip becomes the curl, peel or chunk you see. Nothing is a canned animation.</p>
+        <p>The blade sits in the cut it has made. If you start on top of an object, it presses in as it travels. If you come in from the side, it slides in at board level. Harder materials make the blade lag a little behind your finger.</p>
+        <p>Use <b>Tilt</b> for angled cuts, <b>Lengthwise</b> or <b>Across</b> for perfectly straight cuts through the whole piece, and <b>Width</b> and <b>Thickness</b> to size the peeler. <b>Follow view</b> with a low camera cuts horizontally.</p>
+        <p>Each material reacts in its own way. Soap and wax curl, chocolate curls break off, meat drapes, fruit and vegetables peel, jelly and clay come away in wobbly chunks, and sand, bread and cake crumble. Soft materials wobble visually but are solid pieces, not true soft-body simulations.</p>
         <p>Vibration works on Android browsers; iPhone Safari offers limited haptics. On iPhone, turn off silent mode to hear sound.</p>
       </details>
     </div>
