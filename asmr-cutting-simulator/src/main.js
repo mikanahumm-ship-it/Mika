@@ -189,7 +189,12 @@ $('#grabBtn').onclick = (e) => { game.grabMode = !game.grabMode; e.currentTarget
 $$('[data-mode]').forEach(b => b.onclick = () => {
   game.mode = b.dataset.mode; $$('[data-mode]').forEach(x => x.classList.toggle('on', x === b));
   $('#tiltWrap').classList.toggle('hidden', game.mode !== 'vertical');
-  if (game.mode === 'view') toast('Cuts follow the camera — try a low view');
+  if (game.mode === 'view') { game.guide = 'free'; $$('[data-guide]').forEach(x => x.classList.toggle('on', x.dataset.guide === 'free')); toast('Cuts follow the camera — try a low view'); }
+});
+$$('[data-guide]').forEach(b => b.onclick = () => {
+  game.guide = b.dataset.guide; $$('[data-guide]').forEach(x => x.classList.toggle('on', x === b)); game.audio.ui();
+  if (game.guide !== 'free' && game.mode === 'view') { game.mode = 'vertical'; $$('[data-mode]').forEach(x => x.classList.toggle('on', x.dataset.mode === 'vertical')); $('#tiltWrap').classList.remove('hidden'); }
+  toast({ free: 'Free cuts follow your finger', long: 'Straight cuts along the length', cross: 'Straight cuts across' }[game.guide]);
 });
 $('#tilt').oninput = (e) => { game.tilt = +e.target.value; $('#tiltVal').textContent = `${game.tilt}°`; };
 $('#size').oninput = (e) => { const v = +e.target.value / 100; ui.widthScale = v; ui.depthScale = Math.sqrt(v); $('#sizeVal').textContent = `${v.toFixed(1)}×`; };

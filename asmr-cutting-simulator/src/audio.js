@@ -99,11 +99,12 @@ export class Audio {
     if (!this.ok || !prof) return;
     const P = PROFILES[prof] || PROFILES.soft;
     const intensity = Math.min(1, 0.25 + speed * 0.9);
-    const rate = P.rate * (0.35 + Math.min(1.6, speed)) * (tool.saw ? (0.6 + 0.4 * Math.sin(performance.now() / 70) ** 2) : 1) * Math.max(this.slow, 0.35);
+    const rate = Math.min(140, P.rate * (0.35 + Math.min(1.6, speed))) * (tool.saw ? (0.6 + 0.4 * Math.sin(performance.now() / 70) ** 2) : 1) * Math.max(this.slow, 0.35);
     this.grainClock += dt * rate;
     const now = this.ctx.currentTime;
     let n = 0;
-    while (this.grainClock >= 1 && n < 8) { this.grainClock -= 1; this.grain(prof, intensity, now + Math.random() * dt, tool); n++; }
+    this.grainClock = Math.min(this.grainClock, 4);
+    while (this.grainClock >= 1 && n < 4) { this.grainClock -= 1; this.grain(prof, intensity, now + Math.random() * dt, tool); n++; }
     if (tool.whistle && Math.random() < dt * 8) this.tone(now, 2400 + speed * 800, 0.04, 0.05);
   }
   tone(t, f, amp, dur) {

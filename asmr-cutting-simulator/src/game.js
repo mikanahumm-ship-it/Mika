@@ -37,7 +37,7 @@ class Physics {
     if (!this.ok) return { sim: true, pos: pos.clone(), quat: quat.clone(), vel: lin ? lin.clone() : new THREE.Vector3() };
     const R = this.R;
     const desc = R.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w })
-      .setLinearDamping(0.5).setAngularDamping(1.1).setCcdEnabled(true);
+      .setLinearDamping(0.5).setAngularDamping(1.1);
     const rb = this.world.createRigidBody(desc);
     let n = 0;
     for (const p of parts) {
@@ -78,12 +78,23 @@ class Physics {
 }
 
 function hullPoints(part) {
-  const seen = new Set(), out = [];
-  for (const f of part.faces) for (let i = 0; i < f.pts.length; i += 3) {
-    const k = Math.round(f.pts[i] * 2000) + ',' + Math.round(f.pts[i + 1] * 2000) + ',' + Math.round(f.pts[i + 2] * 2000);
-    if (seen.has(k)) continue; seen.add(k); out.push(f.pts[i], f.pts[i + 1], f.pts[i + 2]);
+  // Unique vertices; cap (cut) vertices are always kept so cut faces collide
+  // exactly, smooth outer-surface vertices are thinned to keep hulls cheap.
+  const seen = new Set(), caps = [], outer = [];
+  for (const f of part.faces) {
+    const dst = f.type === 0 ? outer : caps;
+    for (let i = 0; i < f.pts.length; i += 3) {
+      const k = (Math.round(f.pts[i] * 500) * 73856093) ^ (Math.round(f.pts[i + 1] * 500) * 19349663) ^ (Math.round(f.pts[i + 2] * 500) * 83492791);
+      if (seen.has(k)) continue; seen.add(k); dst.push(f.pts[i], f.pts[i + 1], f.pts[i + 2]);
+    }
   }
-  return new Float32Array(out);
+  const nOut = outer.length / 3, budget = Math.max(24, 140 - caps.length / 3);
+  if (nOut > budget) {
+    const step = nOut / budget, thin = [];
+    for (let j = 0; j < budget; j++) { const i = Math.floor(j * step) * 3; thin.push(outer[i], outer[i + 1], outer[i + 2]); }
+    return new Float32Array(caps.concat(thin));
+  }
+  return new Float32Array(caps.concat(outer));
 }
 
 // ============================================================ mesh building
@@ -124,6 +135,7 @@ export class Game {
     this.slow = false;
     this.mode = 'vertical'; // vertical | view
     this.tilt = 0;          // degrees
+    this.guide = 'free';    // free | long | cross  (straight-line cutting guides)
     this.toolId = 'chef';
     this.finish = 'steel'; this.handle = 'walnut';
     this.grabMode = false;
@@ -525,18 +537,26 @@ export class Game {
     if (!first) s.pts.push({ x: e.clientX, y: e.clientY, t: now });
     const pxs = dist / dt / Math.max(window.innerWidth, 400);
     s.speed = s.speed * 0.7 + pxs * 0.3;
-    const hit = this.hitBody(e.clientX, e.clientY);
+    s.dirty = true;
+    if (first) this.strokeTick();
+  }
+  // Raycast, feedback and trail run at most once per frame, however fast the finger moves.
+  strokeTick() {
+    const s = this.stroke; if (!s || !s.dirty) return;
+    s.dirty = false;
+    const now = performance.now();
+    const pt = s.pts[s.pts.length - 1];
+    const hit = this.hitBody(pt.x, pt.y);
     s.inMat = hit ? hit.object.userData.body : null;
     if (hit) {
       s.hits.push(hit.point.clone());
       if (hit.face && hit.face.normal.y > 0.3 && hit.point.y > s.h + 0.02 && this.mode === 'vertical') s.h = Math.max(s.h, hit.point.y);
-      // live feedback: little particles while blade travels through material
       const b = s.inMat;
       if (b.def.fx !== 'none' && Math.random() < 0.18 * this.tool.weight) {
         const type = b.def.fx === 'shave' ? 'crumb' : b.def.fx;
         this.particles.spawn(type, hit.point, new THREE.Vector3((Math.random() - .5) * .6, .5 + Math.random(), (Math.random() - .5) * .6), surfColor(b.def.in), { scale: 0.6 });
       }
-      if (this.settings.haptics && now - (this.lastBuzz || 0) > 55) { this.ui.buzz(b.def.snd === 'crunch' || b.def.snd === 'crisp' ? 8 : 4); this.lastBuzz = now; }
+      if (this.settings.haptics && now - (this.lastBuzz || 0) > 70) { this.ui.buzz(b.def.snd === 'crunch' || b.def.snd === 'crisp' ? 8 : 4); this.lastBuzz = now; }
       if (b.def.wob && Math.random() < 0.2) b.wobV = Math.max(b.wobV, 0.25 * b.def.wob);
     }
     this.updateTrail();
@@ -569,10 +589,55 @@ export class Game {
     return P;
   }
 
+  // Lengthwise / across guides: the stroke is snapped to a perfectly straight line
+  // along (or across) the long axis of the piece you are cutting. The line spans
+  // the whole piece, so even a short swipe cuts all the way through it.
+  guideActive() { return this.guide !== 'free' && (this.mode === 'vertical' || this.tool.kind !== 'knife'); }
+  guidePath(s, hOff = 0) {
+    const a = s.pts[0], z = s.pts[s.pts.length - 1];
+    const A = this.projectH(a.x, a.y, s.h), Z = this.projectH(z.x, z.y, s.h);
+    if (!A || !Z) return null;
+    const mid = A.clone().add(Z).multiplyScalar(0.5);
+    // target piece: the one under the stroke, else the nearest to its middle
+    let body = s.inMat && this.bodies.includes(s.inMat) ? s.inMat : null;
+    if (!body) { let bd = Infinity; for (const b of this.bodies) { const d = b.mesh.position.distanceToSquared(mid); if (d < bd) { bd = d; body = b; } } }
+    let axis = new THREE.Vector3(1, 0, 0);
+    if (body) {
+      const bb = body.mesh.geometry.boundingBox;
+      const local = (bb.max.x - bb.min.x) >= (bb.max.z - bb.min.z) ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+      const w = local.applyQuaternion(body.mesh.quaternion).setY(0);
+      if (w.lengthSq() > 0.05) axis = w.normalize();
+    }
+    const dir = this.guide === 'long' ? axis : new THREE.Vector3(-axis.z, 0, axis.x);
+    // extent: the swipe itself, widened to cover every piece the line crosses
+    let lo = Math.min(A.clone().sub(mid).dot(dir), Z.clone().sub(mid).dot(dir)), hi = Math.max(A.clone().sub(mid).dot(dir), Z.clone().sub(mid).dot(dir));
+    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    for (const b of this.bodies) {
+      const box = new THREE.Box3().setFromObject(b.mesh);
+      const c = box.getCenter(new THREE.Vector3()), r = box.getSize(new THREE.Vector3()).length() / 2;
+      const off = c.clone().sub(mid);
+      if (Math.abs(off.dot(side)) > r) continue;
+      const t = off.dot(dir);
+      if (t + r < lo - 0.3 || t - r > hi + 0.3) continue;
+      lo = Math.min(lo, t - r); hi = Math.max(hi, t + r);
+    }
+    lo -= 0.15; hi += 0.15;
+    const P0 = mid.clone().addScaledVector(dir, lo), P1 = mid.clone().addScaledVector(dir, hi);
+    P0.y = P1.y = s.h + hOff;
+    const tool = this.tool;
+    if (!tool.path) return [P0, P1];
+    const out = [], L = hi - lo, amp = 0.05, wl = 0.2, step = tool.path === 'zigzag' ? wl / 2 : wl / 8;
+    for (let d = 0; d <= L + 1e-6; d += step) {
+      const ph = d / wl, o = tool.path === 'zigzag' ? (Math.round(ph * 2) % 2 ? amp : -amp) : Math.sin(ph * Math.PI * 2) * amp;
+      out.push(P0.clone().addScaledVector(dir, d).addScaledVector(side, o));
+    }
+    return out;
+  }
+
   // Build world-space cut segments from the screen path.
-  buildSegments(P, stroke) {
+  buildSegments(P, stroke, guided) {
     const segs = [];
-    if (this.mode === 'view') {
+    if (this.mode === 'view' && !guided) {
       const eye = this.camera.position.clone();
       const rays = P.map(([x, y]) => this.ray(x, y).direction);
       const nS = [], mS = [];
@@ -592,10 +657,10 @@ export class Game {
       }
       return segs;
     }
-    const W = P.map(([x, y]) => this.projectH(x, y, stroke.h)).filter(Boolean);
+    const W = guided || P.map(([x, y]) => this.projectH(x, y, stroke.h)).filter(Boolean);
     const path = [];
     for (const w of W) if (!path.length || path[path.length - 1].distanceTo(w) > 0.01) path.push(w);
-    if (path.length >= 2) { // forgive near-misses: extend both ends by ~2 cm
+    if (path.length >= 2 && !guided) { // forgive near-misses: extend both ends by ~2 cm
       const a = path[0], a2 = path[1], z = path[path.length - 1], z2 = path[path.length - 2];
       a.add(a.clone().sub(a2).setY(0).setLength(0.2)); z.add(z.clone().sub(z2).setY(0).setLength(0.2));
     }
@@ -615,6 +680,7 @@ export class Game {
   }
 
   endStroke() {
+    this.strokeTick();
     const s = this.stroke; this.stroke = null;
     this.trailFade = 1;
     this.knifeLift = 0;
@@ -626,17 +692,18 @@ export class Game {
       if (hit) { const b = hit.object.userData.body; b.wobV = Math.max(b.wobV, 0.8 * (b.def.wob || 0.1)); this.audio.finish(b.def.snd, { weight: 0.3 }, 0); }
       return;
     }
+    const guided = this.guideActive() ? this.guidePath(s) : null;
     const P = this.strokePath(s);
-    if (P.length < 2) return;
+    if (P.length < 2 && !guided) return;
     this.pushUndo();
     const before = this.bodies.length;
     let pieces = 0, prof = s.inMat ? s.inMat.def.snd : null;
     if (!prof && s.hits.length) { const hb = this.hitBody(s.pts[Math.floor(s.pts.length / 2)].x, s.pts[Math.floor(s.pts.length / 2)].y); if (hb) prof = hb.object.userData.body.def.snd; }
     if (tool.kind === 'knife') {
-      const segs = this.buildSegments(P, s);
+      const segs = this.buildSegments(P, s, guided);
       pieces = this.knifeCut(segs, tool);
     } else {
-      const W = P.map(([x, y]) => this.projectH(x, y, s.h)).filter(Boolean);
+      const W = guided || P.map(([x, y]) => this.projectH(x, y, s.h)).filter(Boolean);
       pieces = this.carveCut(W, tool);
     }
     const changed = pieces > 0 || this.bodies.length !== before || this.lastChanged;
@@ -696,8 +763,9 @@ export class Game {
     const s = this.stroke; if (!s) return;
     let P = s.pts.map(p => [p.x, p.y]);
     if (P.length > 2 && this.tool.path) P = this.strokePath(s);
-    const W = [];
-    for (const [x, y] of P) {
+    const guided = this.guideActive() && s.pts.length > 1 ? this.guidePath(s, 0.005) : null;
+    const W = guided ? guided.slice() : [];
+    if (!guided) for (const [x, y] of P) {
       let w;
       if (this.mode === 'view') { const r = this.ray(x, y); const pl = new THREE.Plane().setFromNormalAndCoplanarPoint(this.camera.getWorldDirection(new THREE.Vector3()).negate(), this.cam.target); w = r.intersectPlane(pl, new THREE.Vector3()); }
       else w = this.projectH(x, y, s.h + 0.005);
@@ -716,7 +784,15 @@ export class Game {
     this.trail.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     this.trail.material.opacity = 0.55; this.trail.visible = true;
     // knife pose
-    const tip = W[W.length - 1], prev = W[Math.max(0, W.length - 4)];
+    let tip = W[W.length - 1], prev = W[Math.max(0, W.length - 4)];
+    if (guided) { // knife rides along the guide line under the finger, facing the swipe direction
+      const a = guided[0], d = guided[guided.length - 1].clone().sub(a).normalize();
+      const f = s.pts[s.pts.length - 1], f0 = s.pts[0];
+      const fw = this.projectH(f.x, f.y, s.h), f0w = this.projectH(f0.x, f0.y, s.h);
+      if (fw) tip = a.clone().addScaledVector(d, fw.clone().sub(a).dot(d));
+      if (fw && f0w && fw.clone().sub(f0w).dot(d) < 0) d.negate();
+      prev = tip.clone().sub(d);
+    }
     const dir = tip.clone().sub(prev); if (this.mode !== 'view') dir.y = 0;
     if (dir.lengthSq() > 1e-6) this.knifeDir = dir.normalize();
     this.knifeTarget = tip.clone();
@@ -768,6 +844,7 @@ export class Game {
     this.camera.lookAt(c.target);
 
     if (this.grab) this.stepGrab();
+    this.strokeTick();
     this.physics.step(rdt, scale);
     for (const b of [...this.bodies]) {
       if (b.h.sim) this.physics.simStep(b.h, dt);

@@ -36,6 +36,8 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .bottom > * { pointer-events: auto; }
 .modebar { margin: 0 16px; border-radius: 16px; padding: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; align-self: center; max-width: calc(100% - 32px); }
 .seg { padding: 8px 12px; border-radius: 11px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.seg { display: inline-flex; align-items: center; gap: 5px; }
+.divider { width: 1px; height: 20px; background: rgba(60,40,30,.15); margin: 0 2px; }
 .seg.on { background: #fff; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 .slider { display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 12px; color: var(--muted); }
 .slider b { min-width: 30px; color: var(--ink); font-weight: 600; text-align: right; }

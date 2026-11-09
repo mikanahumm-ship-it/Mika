@@ -305,7 +305,7 @@ function orient(faces) {
 export function makeShape(s) {
   let faces;
   const q = s.q || 1; // quality multiplier
-  const R = Math.max(5, Math.round(17 * q)) | 1, C = Math.max(12, Math.round(36 * q / 4) * 4);
+  const R = Math.max(5, Math.round(13 * q)) | 1, C = Math.max(12, Math.round(28 * q / 4) * 4);
   switch (s.type) {
     case 'box': { // half extents hx,hy,hz, bevel r
       const r = s.r ?? 0.06, k = [s.hx - r, s.hy - r, s.hz - r];
