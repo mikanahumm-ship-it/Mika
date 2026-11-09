@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ece5dc">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Slice ASMR</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+
+  <div id="loading"><div class="spinner"></div><span>Sharpening knives…</span></div>
+
+  <header class="top">
+    <button id="objBtn" class="pill glass"><span id="objName">Ribeye Steak</span><svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+    <button id="setBtn" class="icon glass" aria-label="Settings"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  </header>
+
+  <aside class="side">
+    <button id="undoBtn" class="icon glass" aria-label="Undo" disabled><svg viewBox="0 0 24 24" width="20" height="20"><path d="M9 14L4 9l5-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10a6 6 0 010 12h-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></button>
+    <button id="resetBtn" class="icon glass" aria-label="Reset object"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M20 11a8 8 0 10-2.3 5.7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button id="slowBtn" class="icon glass" aria-label="Slow motion"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v4l2.5 2M10 2h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button id="viewBtn" class="icon glass" aria-label="Camera angle"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 8h3l2-3h8l2 3h3v11H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
+    <button id="orbitBtn" class="icon glass" aria-label="Rotate camera with one finger"><svg viewBox="0 0 24 24" width="20" height="20"><ellipse cx="12" cy="12" rx="9" ry="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".5"/><path d="M18 6l3 2-3.5 1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button id="grabBtn" class="icon glass" aria-label="Move pieces"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M8 13V5.5a1.5 1.5 0 013 0V12m0-1V4.5a1.5 1.5 0 013 0V12m0-6.5a1.5 1.5 0 013 0V13m0-4.5a1.5 1.5 0 013 0V15a7 7 0 01-7 7h-1a7 7 0 01-6-3.5L3.5 14a1.6 1.6 0 012.7-1.7L8 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  </aside>
+
+  <div id="hint" class="glass">Drag across the object to cut<br><small>Two fingers rotate &amp; zoom · tap jelly to poke</small></div>
+  <div id="toast" class="glass"></div>
+
+  <footer class="bottom">
+    <div class="modebar glass">
+      <button data-mode="vertical" class="seg on">Straight</button>
+      <button data-mode="view" class="seg">Follow view</button>
+      <div class="slider" id="tiltWrap"><span>Tilt</span><input id="tilt" type="range" min="-50" max="50" value="0" step="1"><b id="tiltVal">0°</b></div>
+      <div class="slider hidden" id="sizeWrap"><span>Width</span><input id="size" type="range" min="40" max="220" value="100" step="5"><b id="sizeVal">1×</b></div>
+    </div>
+    <div class="toolbar" id="toolbar"></div>
+  </footer>
+
+  <section id="objSheet" class="sheet">
+    <div class="sheet-card">
+      <div class="grab-handle"></div>
+      <div class="sheet-head">
+        <h2>Objects</h2>
+        <input id="search" type="search" placeholder="Search 131 objects" autocomplete="off">
+        <button class="icon close" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="cats" id="cats"></div>
+      <div class="grid" id="objGrid"></div>
+    </div>
+  </section>
+
+  <section id="toolSheet" class="sheet">
+    <div class="sheet-card">
+      <div class="grab-handle"></div>
+      <div class="sheet-head"><h2>Knife Collection</h2><span class="muted" id="cutCount"></span><button class="icon close" data-close aria-label="Close">✕</button></div>
+      <div class="grid tools" id="toolGrid"></div>
+      <h3>Blade finish</h3><div class="swatches" id="finishes"></div>
+      <h3>Handle</h3><div class="swatches" id="handles"></div>
+    </div>
+  </section>
+
+  <section id="setSheet" class="sheet">
+    <div class="sheet-card">
+      <div class="grab-handle"></div>
+      <div class="sheet-head"><h2>Settings</h2><button class="icon close" data-close aria-label="Close">✕</button></div>
+      <label class="row"><span>Sound</span><input type="checkbox" id="optSound" class="toggle"></label>
+      <label class="row"><span>Volume</span><input type="range" id="optVol" min="0" max="100" value="90"></label>
+      <label class="row"><span>Vibration</span><input type="checkbox" id="optHaptic" class="toggle"></label>
+      <label class="row"><span>High quality graphics</span><input type="checkbox" id="optQuality" class="toggle"></label>
+      <details class="about">
+        <summary>How cutting works &amp; limitations</summary>
+        <p>Every object is real geometry. Your stroke is turned into cutting planes that follow the path you drew, and the mesh is split exactly along them — pieces you see are the actual result, never a canned animation. Curved strokes are cut as a chain of short straight segments. A stroke that stops inside an object leaves a slit; pieces only fall apart once they are fully separated.</p>
+        <p>The blade cuts all the way down through the object (like pressing a knife to the board). Use <b>Tilt</b> for angled cuts, or <b>Follow view</b> with a low camera to cut horizontally or at any angle.</p>
+        <p>Pieces are rigid bodies with real physics. Soft materials (jelly, slime, clay) wobble visually but are not simulated as true soft bodies. Shavers and gouges remove material as real geometry and turn it into shavings.</p>
+        <p>Vibration works on Android browsers; iPhone Safari offers limited haptics. On iPhone, turn off silent mode to hear sound.</p>
+      </details>
+    </div>
+  </section>
+  <label id="hapticLabel" aria-hidden="true"><input type="checkbox" switch id="hapticSwitch"></label>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
