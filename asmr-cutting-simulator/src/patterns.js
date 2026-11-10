@@ -21,7 +21,7 @@ function vnoise(x, y, z) {
 }
 function fbm(x, y, z) {
   let a = 0.5, s = 0;
-  for (let i = 0; i < 4; i++) { s += a * vnoise(x, y, z); x = x * 2.03 + 1.7; y = y * 2.03 + 9.2; z = z * 2.03 + 3.1; a *= 0.5; }
+  for (let i = 0; i < 3; i++) { s += a * vnoise(x, y, z); x = x * 2.03 + 1.7; y = y * 2.03 + 9.2; z = z * 2.03 + 3.1; a *= 0.5; }
   return s;
 }
 

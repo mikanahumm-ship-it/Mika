@@ -23,6 +23,8 @@ const DEFS = {
   jelly: { geo: () => new THREE.BoxGeometry(0.04, 0.04, 0.04), mat: () => new THREE.MeshPhysicalMaterial({ roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.8 }), size: [0.4, 1.2], g: 12, drag: 0.4, settle: 'rest', life: 12 },
   sand: { geo: () => new THREE.BoxGeometry(0.014, 0.014, 0.014), mat: () => new THREE.MeshStandardMaterial({ roughness: 1 }), size: [0.6, 1.4], g: 10, drag: 1.0, settle: 'rest', life: 25 },
   ice: { geo: () => new THREE.TetrahedronGeometry(0.03, 0), mat: () => new THREE.MeshPhysicalMaterial({ roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.6 }), size: [0.4, 1.4], g: 14, drag: 0.2, settle: 'rest', life: 12 },
+  blob: { geo: () => new THREE.SphereGeometry(0.032, 12, 9), mat: () => new THREE.MeshPhysicalMaterial({ roughness: 0.25, clearcoat: 0.8 }), size: [0.6, 1.9], g: 14, drag: 0.35, settle: 'splat', life: 16 },
+  glass: { geo: () => new THREE.TetrahedronGeometry(0.04, 0), mat: () => new THREE.MeshPhysicalMaterial({ roughness: 0.02, clearcoat: 1, transparent: true, opacity: 0.55, metalness: 0.1 }), size: [0.3, 1.5], g: 14, drag: 0.2, settle: 'rest', life: 20 },
   choc: { geo: () => new THREE.BoxGeometry(0.05, 0.008, 0.03), mat: () => new THREE.MeshStandardMaterial({ roughness: 0.4 }), size: [0.5, 1.3], g: 12, drag: 0.6, settle: 'rest', life: 25 },
 };
 

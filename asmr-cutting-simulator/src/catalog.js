@@ -19,6 +19,7 @@ const ell = (a, b, c, flat = 0.15) => ({ type: 'ell', a, b, c, flat });
 
 export const CATEGORIES = [
   { id: 'viral', name: 'Viral & Squishy' },
+  { id: 'glass', name: 'Glass & Ice' },
   { id: 'meat', name: 'Meat & Fish' },
   { id: 'sushi', name: 'Sushi' },
   { id: 'bakery', name: 'Bakery' },
@@ -234,6 +235,27 @@ add(V, 'sourbelt', 'Sour Belt Stack', box(1.0, 0.4, 0.5, 0.05), S(PAT.layers, ['
 add(V, 'sugarcube', 'Giant Sugar Cube', box(0.7, 0.55, 0.7, 0.02), S(PAT.grain, ['#ffffff', '#f2f2f2', '#ffffff'], 3, [0.8]), S(PAT.grain, ['#ffffff', '#f5f5f5', '#ffffff'], 3, [0.8]), { snd: 'crunch', fx: 'sand', mat: { rough: 0.9 } });
 add(V, 'croissant', 'Butter Croissant', { type: 'capsule', hx: 1.2, rad: 0.42, taper: 0.6 }, S(PAT.speckle, ['#c8873a', '#dca052', '#8a4f1c'], 4, [0.75, 0.6]), S(PAT.rings, ['#f4d79a', '#d9a65c'], 18, [0.2], { axis: [1, 0, 0], center: [0, 0.42, 0] }), { snd: 'bread', fx: 'crumb', mat: { rough: 0.6, clearcoat: 0.3 } });
 add(V, 'rainbowcrepe', 'Rainbow Crêpe Cake', cyl(0.95, 0.55, 0.05), S(PAT.solid, ['#fbf4ea', '#f4eadc'], 4), S(PAT.layers, ['#ffb3c1', '#ffe0a3', '#b8f0c8', '#b8d4ff'], 16, [0.02, 0, 4, 0.1]), { snd: 'cake', fx: 'crumb', mat: { rough: 0.7 } });
+
+// ======================= GLASS & ICE =======================
+const glass = (op = 0.4, extra = {}) => ({ snd: 'glass', fx: 'glass', mat: { rough: 0.02, clearcoat: 1, opacity: op, spec: 1 }, ...extra });
+const iceM = (op = 0.55, extra = {}) => ({ snd: 'ice', fx: 'ice', mat: { rough: 0.04, clearcoat: 1, opacity: op, spec: 1 }, ...extra });
+const G = 'glass';
+add(G, 'glassblock', 'Clear Glass Block', box(0.8, 0.5, 0.8, 0.04), S(PAT.solid, ['#d8f1ee', '#ecf9f7'], 3), S(PAT.solid, ['#d0eeea', '#e6f7f4'], 3), glass(0.35, { star: true }));
+add(G, 'stainedglass', 'Stained Glass Tile', box(1.0, 0.14, 0.8, 0.02), S(PAT.swirl, ['#e94b6b', '#3fa7d6', '#f6c445'], 3, [4, 0.8]), S(PAT.swirl, ['#e94b6b', '#3fa7d6', '#f6c445'], 3, [4, 0.8]), glass(0.7));
+add(G, 'glassmarble', 'Giant Glass Marble', ell(0.6, 0.6, 0.6, 0.08), S(PAT.swirl, ['#dff6ff', '#2f7de1', '#ff7a59'], 4, [6, 0.9]), S(PAT.swirl, ['#dff6ff', '#2f7de1', '#ff7a59'], 4, [6, 0.9]), glass(0.6, { star: true }));
+add(G, 'frostedglass', 'Frosted Glass Brick', box(0.9, 0.45, 0.6, 0.06), S(PAT.grain, ['#e7f2f7', '#d5e7ef', '#ffffff'], 1.5, [0.4]), S(PAT.solid, ['#e3f1f6', '#f2f9fb'], 3), glass(0.75, { mat: { rough: 0.45, clearcoat: 0.6, opacity: 0.75 } }));
+add(G, 'temperedglass', 'Tempered Glass Pane', box(1.1, 0.08, 0.8, 0.01), S(PAT.solid, ['#cfe9e6', '#e3f4f2'], 3), S(PAT.solid, ['#bfe2de', '#d8efec'], 3), glass(0.32));
+add(G, 'seaglass', 'Sea Glass Pebble', ell(0.7, 0.35, 0.5, 0.3), S(PAT.grain, ['#8fcfb3', '#a7dcc4', '#d6f0e4'], 1.4, [0.5]), S(PAT.solid, ['#8fcfb3', '#a9dcc5'], 3), glass(0.7, { mat: { rough: 0.5, clearcoat: 0.4, opacity: 0.72 } }));
+add(G, 'crystalball', 'Crystal Ball', ell(0.65, 0.65, 0.65, 0.08), S(PAT.solid, ['#f4f8ff', '#ffffff'], 3), S(PAT.solid, ['#eef4ff', '#ffffff'], 3), glass(0.25));
+add(G, 'amberglass', 'Amber Glass Block', box(0.8, 0.55, 0.6, 0.08), S(PAT.solid, ['#d98a2b', '#e9a24a'], 3), S(PAT.solid, ['#d98a2b', '#eaa652'], 3), glass(0.55));
+add(G, 'cobaltglass', 'Cobalt Glass Prism', cyl(0.6, 0.6, 0.0, { segs: 3 }), S(PAT.solid, ['#2a52be', '#3a66d4'], 3), S(PAT.solid, ['#2a52be', '#4672dc'], 3), glass(0.6));
+add(G, 'icecube', 'Giant Ice Cube', box(0.75, 0.75, 0.75, 0.12), S(PAT.grain, ['#e8f7ff', '#f6fcff', '#ffffff'], 0.6, [0.3]), S(PAT.solid, ['#e5f6ff', '#f4fbff'], 3), iceM(0.5, { star: true }));
+add(G, 'crushedice', 'Packed Crushed Ice', box(0.9, 0.5, 0.7, 0.05), S(PAT.grain, ['#f2fbff', '#d8eef9', '#ffffff'], 2.2, [0.7]), S(PAT.grain, ['#f2fbff', '#d8eef9', '#ffffff'], 2.2, [0.7]), iceM(0.9, { mat: { rough: 0.35, clearcoat: 0.5, opacity: 0.92 } }));
+add(G, 'glacier', 'Blue Glacier Ice', box(1.0, 0.6, 0.7, 0.05), S(PAT.layers, ['#bfe6ff', '#8cc8f0', '#d9f2ff', '#6fb2e6'], 5, [0.15, 0, 4, 0.2]), S(PAT.layers, ['#bfe6ff', '#8cc8f0', '#d9f2ff', '#6fb2e6'], 5, [0.15, 0, 4, 0.2]), iceM(0.7));
+add(G, 'icepop', 'Rainbow Ice Pop', box(1.0, 0.3, 0.45, 0.15), S(PAT.layers, ['#ff5d7a', '#ffb347', '#ffe066', '#6fd3a8'], 6.6, [0.05, 0, 4, 0.1]), S(PAT.layers, ['#ff5d7a', '#ffb347', '#ffe066', '#6fd3a8'], 6.6, [0.05, 0, 4, 0.1]), iceM(0.8, { snd: 'ice' }));
+add(G, 'flowerice', 'Frozen Flower Ice', box(0.8, 0.6, 0.8, 0.08), S(PAT.dots, ['#eef9ff', '#ff8fb5', '#ffd84d', '#c9a2ff'], 3.2, [0.16]), S(PAT.dots, ['#eef9ff', '#ff8fb5', '#ffd84d', '#c9a2ff'], 3.2, [0.16]), iceM(0.6, { star: true }));
+add(G, 'lemonice', 'Lemon Slice Ice Ball', ell(0.7, 0.7, 0.7, 0.06), S(PAT.dots, ['#eef9ff', '#f6e24a', '#fff3a0', '#f6e24a'], 3, [0.2]), S(PAT.dots, ['#eef9ff', '#f6e24a', '#fff3a0', '#f6e24a'], 3, [0.2]), iceM(0.6));
+add(G, 'icicle', 'Icicle Block', cyl(0.45, 0.9, 0.1, { rTop: 0.25 }), S(PAT.stripes, ['#e6f6ff', '#cfeaf9', '#ffffff'], 6, [0.2]), S(PAT.solid, ['#e6f6ff', '#f5fbff'], 3), iceM(0.55));
 
 export const OBJECTS = L;
 export const byId = Object.fromEntries(L.map(o => [o.id, o]));

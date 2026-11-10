@@ -32,7 +32,7 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 
 ## Content
 
-- **161 objects** in 13 categories: viral & squishy (pistachio kunafa chocolate, tanghulu, mille crêpe, geode, stress ball, slime, play dough, water-bead jelly …), meat & fish, sushi, bakery, cakes, cheese, fruit, vegetables, sweets & jelly, soap, soft & sand, wax & candles, and other satisfying objects.
+- **177 objects** in 14 categories: glass & ice (glass blocks, stained glass, marbles, tempered pane, ice cubes, glacier ice, frozen-flower ice …), viral & squishy (pistachio kunafa chocolate, tanghulu, mille crêpe, geode, stress ball, slime, play dough, water-bead jelly …), meat & fish, sushi, bakery, cakes, cheese, fruit, vegetables, sweets & jelly, soap, soft & sand, wax & candles, and other satisfying objects.
 - **16 tools**: Chef's knife, Dicer (sweeps objects into thousands of cubes), Squish (press and hold to deform), santoku, cleaver, bread knife (serrated sawing sound), precision blade, soap cutter, wire cutter, soap shaver, carving gouge. Five more unlock as you cut: crinkle cutter, wave blade, melon scoop, obsidian blade and light blade.
 - **Customisation**: 6 blade finishes (Damascus, gold and obsidian unlock) and 6 handle colours.
 
@@ -68,6 +68,16 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
     | Brittle | chocolate, ice, soap, crunchy food | The object gives a little, then cracks into real pieces along planes through your finger. |
 
   - Cutting a dented object traces the real (non-convex) cross-section instead of a convex hull.
+- **Splat**: keep holding a squish past full depth and soft things give way. Jelly, slime and fruit burst into real chunks that fly out to the sides. Dough, clay, sand and cake flatten into a pancake (an affine squash, so the geometry stays valid) and squirt blobs coloured from the inside.
+- **Salad mode** (`src/bowl.js`).
+  - *＋ Add* in the object menu puts more objects on the board.
+  - The bowl button brings a bowl beside the board. Every cut piece, curl and diced cube flies into it in a real ballistic arc, with physics walls and the cube pile fitted to the bowl's shape.
+  - **Mix** tosses the contents up and swirls them.
+- **Glass & ice**: glass has its own sound (scratch, shatter, tinkle shower) and glass shards. Squishing glass shatters it into many real pieces.
+- **Smooth on phones**:
+  - Resolution adapts automatically from measured frame time, and shadows switch off if a phone still can't keep up.
+  - When the blade falls behind a fast swipe it takes longer steps, and on release it catches up to where your finger ended, so fast flicks always cut through.
+- **Sound variety**: object-size pitch, blade whoosh through the air, landing thuds when pieces hit the board, cubes pattering onto the pile, a continuous wet or crumbly squish, splat and shatter sounds, and a camera shake on big moments.
 - **Guides**: Lengthwise and Across lock the blade to a straight line along or across the piece's long axis. On release the cut is completed in both directions through the whole piece.
 - **Volumetric materials** (`src/materials.js`). Colour comes from the 3D position inside the object (marbling, layers, fruit flesh and seeds, citrus segments, crumb, sand grain …), so every new surface shows the matching inside.
 - **Physics** (`vendor/rapier.es.js`). Pieces and curls are Rapier rigid bodies with convex-hull colliders.
@@ -93,10 +103,11 @@ src/game.js                scene, physics bridge, input, camera, undo, follow-vi
 src/live.js                live cutting engine: blade path, slots, peeling, curls, material behaviour
 src/dice.js                dicer cubes: voxelisation + lightweight pile simulation
 src/patterns.js            CPU port of the volumetric material patterns (cube colours)
-src/squish.js              squish tool: press deformation, baking, spring-back, cracking
+src/squish.js              squish tool: press deformation, baking, spring-back, cracking, splat
+src/bowl.js                salad mode: several objects, the bowl, gathering and tossing
 src/geometry.js            convex part kernel: split, caps, connectivity, shape generators
 src/materials.js           procedural volumetric shaders (15 patterns)
-src/catalog.js             161 object definitions (data only — add objects here)
+src/catalog.js             177 object definitions (data only — add objects here)
 src/tools.js               tool definitions, 3D knife models, icons
 src/audio.js               procedural ASMR sound engine
 src/particles.js           instanced shavings / crumbs / juice / sand / ice

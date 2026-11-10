@@ -9,6 +9,7 @@ import { Particles } from './particles.js';
 import { installLive } from './live.js';
 import { Dice } from './dice.js';
 import { installSquish } from './squish.js';
+import { installBowl } from './bowl.js';
 
 const GRAVITY = 55;          // world units are ~10 cm; slightly dreamy gravity
 const BOARD = { hx: 3.6, hz: 2.4, h: 0.28 };
@@ -220,11 +221,31 @@ export class Game {
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
+  // Phones start at a modest resolution; the frame loop then adapts it to keep
+  // the game smooth (see adaptQuality).
   applyQuality() {
     const hi = this.settings.quality === 'high';
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, hi ? 1.75 : 1.1));
+    this.mobile = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+    this.prCap = Math.min(window.devicePixelRatio, hi ? (this.mobile ? 1.6 : 1.75) : 1.0);
+    this.pr = this.mobile ? Math.min(this.prCap, 1.25) : this.prCap;
+    this.renderer.setPixelRatio(this.pr);
     this.renderer.shadowMap.enabled = true;
-    if (this.sun) this.sun.shadow.mapSize.set(hi ? 1536 : 768, hi ? 1536 : 768);
+    if (this.sun) { this.sun.castShadow = true; this.sun.shadow.mapSize.set(hi && !this.mobile ? 1536 : 1024, hi && !this.mobile ? 1536 : 1024); }
+  }
+  adaptQuality(rdt) {
+    this.ft = this.ft ? this.ft * 0.95 + rdt * 0.05 : rdt;
+    this.qT = (this.qT || 0) + rdt;
+    if (this.qT < 1) return;
+    this.qT = 0;
+    let pr = this.pr;
+    if (this.ft > 1 / 42 && pr > 0.7) pr = Math.max(0.7, pr - 0.15);
+    else if (this.ft < 1 / 57 && pr < this.prCap) pr = Math.min(this.prCap, pr + 0.1);
+    if (pr !== this.pr) { this.pr = pr; this.renderer.setPixelRatio(pr); this.resize(); }
+    // still too slow at minimum resolution: drop the shadows
+    if (this.sun) {
+      if (this.ft > 1 / 40 && pr <= 0.75) this.sun.castShadow = false;
+      else if (this.ft < 1 / 55 && pr > 0.95) this.sun.castShadow = true;
+    }
   }
 
   buildBoard() {
@@ -277,7 +298,7 @@ export class Game {
     b.mesh.geometry.dispose(); for (const m of b.mesh.material) m.dispose();
     this.bodies.splice(this.bodies.indexOf(b), 1);
   }
-  clearAll() { while (this.bodies.length) this.removeBody(this.bodies[0]); while (this.curls.length) this.removeCurl(this.curls[0]); this.particles.clear(); if (this.dice) this.dice.clear(); }
+  clearAll() { if (this.removeBowl) this.removeBowl(); while (this.bodies.length) this.removeBody(this.bodies[0]); while (this.curls.length) this.removeCurl(this.curls[0]); this.particles.clear(); if (this.dice) this.dice.clear(); }
 
   spawn(id, drop = true) {
     const def = byId[id] || OBJECTS[0];
@@ -287,10 +308,28 @@ export class Game {
     const part = makeShape(def.shape);
     this.addBody(def, [part], new THREE.Vector3(0, drop ? 0.35 : 0.002, 0), new THREE.Quaternion());
     if (drop) setTimeout(() => { this.audio.tick(0.22); this.wobbleAll(0.5); }, 170);
-    this.ui.onObject(def);
+    const bb = part.bounds(); const size = Math.max(bb.mx[0] - bb.mn[0], bb.mx[1] - bb.mn[1], bb.mx[2] - bb.mn[2]);
+    this.audio.objPitch = THREE.MathUtils.clamp(2.2 / size, 0.8, 1.35);
+    this.placed = [{ id: def.id, x: 0, z: 0, yaw: 0 }];
+    this.camGoal.target = new THREE.Vector3(0, 0.35, 0);
+    this.ui.onObject(def, 1);
     this.savePrefs();
   }
-  reset() { if (this.current) { this.spawn(this.current.id); this.audio.ui(); } }
+  reset() {
+    if (!this.current) return;
+    const placed = this.placed && this.placed.length > 1 ? this.placed.slice() : null;
+    this.spawn(placed ? placed[0].id : this.current.id);
+    if (placed) {
+      // salad: put every object back where it was
+      this.clearAll(); this.placed = [];
+      for (const p of placed) {
+        const def = byId[p.id]; this.placed.push(p);
+        this.addBody(def, [makeShape(def.shape)], new THREE.Vector3(p.x, 0.4, p.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw));
+      }
+      this.ui.onObject(this.current, this.placed.length);
+    }
+    this.audio.ui();
+  }
 
   snapshot() {
     return this.bodies.map(b => {
@@ -872,6 +911,7 @@ export class Game {
 
   frame() {
     const rdt = Math.min(this.clock.getDelta(), 0.05);
+    this.adaptQuality(rdt);
     const scale = this.slow ? 0.25 : 1;
     const dt = rdt * scale;
     this.time.value += dt;
@@ -879,20 +919,37 @@ export class Game {
     // camera smoothing
     const c = this.cam, g = this.camGoal, k = 1 - Math.pow(0.0008, rdt);
     c.theta += (g.theta - c.theta) * k; c.phi += (g.phi - c.phi) * k; c.r += (g.r - c.r) * k;
+    if (g.target !== c.target) c.target.lerp(g.target, k * 0.8);
     const r = c.r * (this.portraitBoost || 1);
     this.camera.position.set(c.target.x + r * Math.sin(c.phi) * Math.sin(c.theta), c.target.y + r * Math.cos(c.phi), c.target.z + r * Math.sin(c.phi) * Math.cos(c.theta));
     this.camera.lookAt(c.target);
+    if (this.shakeA > 0.0005) {
+      const a = this.shakeA; this.shakeA *= Math.pow(0.002, rdt);
+      this.camera.position.add(new THREE.Vector3((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a));
+    }
 
     if (this.grab) this.stepGrab();
     if (this.stroke && this.stroke.live) this.liveUpdate(rdt); else this.strokeTick();
     this.squishUpdate(rdt);
     this.physics.step(rdt, scale);
+    let landed = 0;
     for (const b of [...this.bodies]) {
       if (b.h.sim) this.physics.simStep(b.h, dt);
       this.physics.read(b.h, b.mesh.position, b.mesh.quaternion);
       if (b.mesh.position.y < -6) { this.removeBody(b); continue; }
       if (b.wobV > 0.0005) { b.wobV *= Math.pow(0.12, dt); b.uni.wob.value = b.wobV * 0.08; } else b.uni.wob.value = 0;
+      // a piece that was falling and just stopped has landed: sound + a little squash
+      if (!b.h.sim && this.settings.sound) {
+        const vy = b.h.rb.linvel().y;
+        if ((b.vyPrev || 0) < -1.6 && vy > -0.4 && landed < 3) {
+          landed++;
+          this.audio.land(Math.min(1, b.parts.reduce((a, p) => a + p.massProps().V, 0) * 1.5), b.def.snd);
+          b.wobV = Math.max(b.wobV, 0.25 + (b.def.wob || 0));
+        }
+        b.vyPrev = vy;
+      }
     }
+    if (this.dice.landedNow) { if (this.settings.sound) this.audio.pitter(this.dice.landedNow, this.dice.prof); this.dice.landedNow = 0; }
     this.particles.update(dt);
     this.dice.update(dt);
     if (this.dice.count !== this._shownDice) { this._shownDice = this.dice.count; this.ui.onCubes && this.ui.onCubes(this.dice.count); }
@@ -938,4 +995,5 @@ function rdp(P, eps) {
 
 installLive(Game, { buildGeometry, bodyMaterials });
 installSquish(Game, { buildGeometry });
+installBowl(Game, { BOARD });
 export { Part };

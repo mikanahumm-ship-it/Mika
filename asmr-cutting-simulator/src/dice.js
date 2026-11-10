@@ -28,7 +28,7 @@ export class Dice {
     this.mesh = new THREE.InstancedMesh(geo, mat, MAX);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
-    this.mesh.count = 0; this.mesh.castShadow = true; this.mesh.receiveShadow = true; this.mesh.frustumCulled = false;
+    this.mesh.count = 0; this.mesh.castShadow = false; this.mesh.receiveShadow = true; this.mesh.frustumCulled = false;
     scene.add(this.mesh);
     // state
     this.p = new Float32Array(MAX * 3); this.v = new Float32Array(MAX * 3);
@@ -41,21 +41,72 @@ export class Dice {
     this.resetField();
   }
   resetField() {
-    const { hx, hz, h } = this.board;
+    const { hx, hz, h } = this.board, B = this.bowl;
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
       const x = -HALF + (i + 0.5) * CELL, z = -HALF + (j + 0.5) * CELL;
-      this.H[i * N + j] = Math.abs(x) <= hx && Math.abs(z) <= hz ? 0 : -h;
+      let base = Math.abs(x) <= hx && Math.abs(z) <= hz ? 0 : -h;
+      if (B) {
+        // bowl: flat floor, then the slanted wall, then the rim
+        const r = Math.hypot(x - B.x, z - B.z);
+        if (r < B.rb) base = B.floor;
+        else if (r < B.rt) base = B.floor + (r - B.rb) / (B.rt - B.rb) * (B.top - B.floor);
+        else if (r < B.rt + 0.12) base = B.top + 0.05;
+      }
+      this.H[i * N + j] = base;
     }
   }
-  clear() { this.n = 0; this.mesh.count = 0; this.active.length = 0; this.resetField(); if (this.hop) this.hop.tgt.fill(-1); }
+  setBowl(b) {
+    this.bowl = b ? { ...b, rb: b.radiusAt(b.floor), rt: b.radiusAt(b.top) } : null;
+    this.rebuildField();
+  }
+  // height field from the settled cubes that are not moving
+  rebuildField() {
+    this.resetField();
+    for (let i = 0; i < this.n; i++) if (!this.live[i]) {
+      const c = this.cell(this.p[i * 3], this.p[i * 3 + 2]);
+      if (c >= 0) this.H[c] = Math.max(this.H[c], this.p[i * 3 + 1] + this.s[i] / 2);
+    }
+  }
+  inBowl(i) { const B = this.bowl; return B && Math.hypot(this.p[i * 3] - B.x, this.p[i * 3 + 2] - B.z) < B.rt + 0.1; }
+  // every cube flies into the bowl in an arc
+  gather(T = 0.9) {
+    const B = this.bowl; if (!B) return;
+    const list = [];
+    for (let i = 0; i < this.n; i++) if (!this.inBowl(i)) list.push(i);
+    for (const i of list) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * B.rb * 0.85;
+      const tx = B.x + Math.cos(a) * r, tz = B.z + Math.sin(a) * r, ty = B.floor + 0.3;
+      const tt = T * (0.8 + Math.random() * 0.5);
+      this.v.set([(tx - this.p[i * 3]) / tt, (ty - this.p[i * 3 + 1]) / tt + 0.5 * G * tt, (tz - this.p[i * 3 + 2]) / tt], i * 3);
+      this.w.set([(Math.random() - 0.5) * 10, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 10], i * 3);
+      this.wake(i);
+    }
+    this.rebuildField();
+  }
+  // throw the bowl's cubes up and swirl them
+  toss() {
+    const B = this.bowl; if (!B) return;
+    for (let i = 0; i < this.n; i++) {
+      if (!this.inBowl(i)) continue;
+      const dx = this.p[i * 3] - B.x, dz = this.p[i * 3 + 2] - B.z, r = Math.hypot(dx, dz) || 1;
+      this.v.set([-dz / r * 1.6 - dx * 0.5 + (Math.random() - 0.5) * 0.8, 2.5 + Math.random() * 3.5, dx / r * 1.6 - dz * 0.5 + (Math.random() - 0.5) * 0.8], i * 3);
+      this.w.set([(Math.random() - 0.5) * 12, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 12], i * 3);
+      this.wake(i);
+    }
+    this.rebuildField();
+  }
+  wake(i) {
+    if (!this.live[i]) { this.live[i] = 1; this.active.push(i); }
+    this.age[i] = 0; if (this.hop) this.hop.tgt[i] = -1;
+  }
+  clear() { this.n = 0; this.mesh.count = 0; this.active.length = 0; this.bowl = null; this.resetField(); if (this.hop) this.hop.tgt.fill(-1); }
   get count() { return this.n; }
   // Undo support: drop cubes created after a snapshot (and rebuild the piles).
   truncate(n) {
     if (n >= this.n) return;
     this.n = n; this.mesh.count = n;
     this.active = this.active.filter(i => i < n);
-    this.resetField();
-    for (let i = 0; i < n; i++) if (!this.live[i]) { const c = this.cell(this.p[i * 3], this.p[i * 3 + 2]); if (c >= 0) this.H[c] = Math.max(this.H[c], this.p[i * 3 + 1] + this.s[i] / 2); }
+    this.rebuildField();
   }
   cell(x, z) {
     const i = Math.floor((x + HALF) / CELL), j = Math.floor((z + HALF) / CELL);
@@ -65,6 +116,7 @@ export class Dice {
   // Voxelise a removed convex part of `body` into cubes of size `size`.
   // `push` is the direction the cubes spill toward.
   addFromPart(body, part, size, push, def) {
+    this.prof = def.snd;
     let planes = part._planes;
     if (!planes) {
       planes = [];
@@ -143,6 +195,7 @@ export class Dice {
         const ci = Math.floor(cur / N) + da * step, cj = (cur % N) + db * step;
         if (ci < 0 || cj < 0 || ci >= N || cj >= N) continue;
         const cc = ci * N + cj, hh = this.footTop(cc, r);
+        if (this.bowl) { const B = this.bowl, d0 = Math.hypot(this.cellX(c) - B.x, this.cellZ(c) - B.z), d1 = Math.hypot(this.cellX(cc) - B.x, this.cellZ(cc) - B.z); if (d0 < B.rt && d1 > B.radiusAt(Math.max(B.floor, hh)) - s * 0.5) continue; }
         if (hh < bh - (Math.random() * s * 0.3)) { bh = hh; best = cc; }
       }
       if (best < 0) break;
@@ -166,6 +219,7 @@ export class Dice {
       _e.y = Math.round(_e.y / (Math.PI / 2)) * (Math.PI / 2) + (Math.random() - 0.5) * 0.45;
       _q.setFromEuler(_e);
       this.live[i] = 0;
+      this.landedNow = (this.landedNow || 0) + 1;
     };
     for (const i of this.active) {
       const s = this.s[i];
@@ -183,6 +237,12 @@ export class Dice {
       } else {
         V[i * 3 + 1] -= G * dt;
         P[i * 3] += V[i * 3] * dt; P[i * 3 + 1] += V[i * 3 + 1] * dt; P[i * 3 + 2] += V[i * 3 + 2] * dt;
+        const BW = this.bowl;
+        if (BW && P[i * 3 + 1] < BW.top + 0.05 && V[i * 3 + 1] < 0.5) {
+          const dx = P[i * 3] - BW.x, dz = P[i * 3 + 2] - BW.z, r = Math.hypot(dx, dz);
+          const lim = BW.radiusAt(Math.max(BW.floor, P[i * 3 + 1])) - s * 0.6;
+          if (r > lim && r < BW.rt + 0.3) { P[i * 3] = BW.x + dx / r * lim; P[i * 3 + 2] = BW.z + dz / r * lim; V[i * 3] *= -0.3; V[i * 3 + 2] *= -0.3; }
+        }
         _dq.setFromEuler(_e.set(W[i * 3] * dt, W[i * 3 + 1] * dt, W[i * 3 + 2] * dt)); _q.premultiply(_dq);
         const c = this.cell(P[i * 3], P[i * 3 + 2]);
         const r = this.footR(s);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { refineParts, faceNormal, Face, Part } from './geometry.js';
 import { surfColor } from './materials.js';
+import { patColor } from './patterns.js';
 
 // ============================================================================
 // Squish: press and hold to deform an object.
@@ -32,6 +33,9 @@ export function squishBehavior(def) {
   else if (s === 'wax') B = { style: 'plastic', speed: 1.3, max: 0.4, bulge: 0.6 };
   else if (s === 'soap') B = { style: 'brittle', speed: 1.4, max: 0.3, bulge: 0.3, crack: 0.07 };
   else if (s === 'choc' || s === 'ice' || s === 'crunch' || s === 'crisp') B = { style: 'brittle', speed: 1.6, max: 0.3, bulge: 0.2, crack: 0.045 };
+  else if (s === 'glass') B = { style: 'brittle', speed: 1.2, max: 0.2, bulge: 0.1, crack: 0.025, shards: 7 };
+  // keep pressing past full depth and soft things splat
+  B.splat = B.style !== 'brittle' && !['kitchensponge', 'stressball', 'memoryfoam', 'squishy'].includes(def.id);
   return Object.assign(B, def.squish || {});
 }
 
@@ -95,6 +99,7 @@ export function installSquish(Game, helpers) {
     if (!hit) { this.sq = { b: null, holding: true, x: e.clientX, y: e.clientY }; return; }
     const b = hit.object.userData.body;
     this.sq = { b, holding: true, h: 0, x: e.clientX, y: e.clientY, beh: squishBehavior(b.def), snap: this.snapshot(), changed: false, t: 0 };
+    if (this.settings.sound) this.audio.squishStart(b.def.snd);
     this.squishAt(hit.point);
   };
 
@@ -127,7 +132,7 @@ export function installSquish(Game, helpers) {
 
   P_.squishMove = function (e) {
     const q = this.sq; if (!q) return;
-    q.x = e.clientX; q.y = e.clientY;
+    q.x = e.clientX; q.y = e.clientY; q.moved = true;
   };
 
   P_.squishUpdate = function (dt) {
@@ -143,7 +148,7 @@ export function installSquish(Game, helpers) {
     const b = q.b, beh = q.beh;
     q.t += dt;
     // finger slides: plastic leaves a groove (bake + continue), elastic dent follows
-    const hit = this.hitBody(q.x, q.y);
+    const hit = q.moved ? this.hitBody(q.x, q.y) : null; q.moved = false;
     if (hit && hit.object.userData.body === b && hit.point.distanceTo(q.cw) > q.P.R * 0.6) {
       if (beh.style === 'plastic' && q.P.h > 0.004) { this.squishBake(); q.h *= 0.55; this.squishAt(hit.point); }
       else if (beh.style !== 'plastic') {
@@ -160,13 +165,15 @@ export function installSquish(Game, helpers) {
     if (q.h > 0.004) q.changed = true;
     if (beh.wobble || beh.style === 'elastic') b.wobV = Math.max(b.wobV, 0.15 + (beh.wobble || 0.2));
     // sound, haptics, particles
-    if (this.settings.sound) this.audio.scrape(b.def.snd, Math.min(2, rate * 6 + 0.15), dt, { pitch: 0.75 });
+    if (this.settings.sound) this.audio.squishSet(Math.min(1, rate * 4 + 0.05), q.h / q.maxH);
     if (this.settings.haptics) { const now = performance.now(); if (now - (this.lastBuzz || 0) > 90 && rate > 0.02) { this.ui.buzz(5); this.lastBuzz = now; } }
     if (beh.fx && rate > 0.01 && Math.random() < 0.5) {
       const ang = Math.random() * Math.PI * 2, rr = q.P.R * (1 + Math.random() * 0.4);
       const at = q.cw.clone().add(new THREE.Vector3(Math.cos(ang) * rr, 0.02, Math.sin(ang) * rr));
       this.particles.spawn(beh.fx, at, new THREE.Vector3(Math.cos(ang) * 0.6, 0.6 + Math.random(), Math.sin(ang) * 0.6), surfColor(b.def.in), { scale: 0.7 });
     }
+    // pressed all the way and still holding: SPLAT
+    if (beh.splat && q.h >= q.maxH * 0.95) { q.over = (q.over || 0) + dt; if (q.over > (beh.style === 'elastic' ? 0.9 : 0.5)) { this.squishSplat(); this.squishPose(dt); return; } }
     // brittle things crack once pressed far enough
     if (beh.style === 'brittle' && q.h >= Math.min(q.maxH * 0.95, beh.crack)) this.squishCrack();
     this.squishPose(dt);
@@ -186,25 +193,98 @@ export function installSquish(Game, helpers) {
     b.uni.pressH.value = 0;
     if (!q.pushed) { this.undoStack.push(q.snap); q.snap.curls = this.curls.length; q.snap.dice = this.dice.count; this.ui.onUndo(this.undoStack.length); q.pushed = true; }
     // a few cracks radiating from the finger, through the whole piece
-    const k = 3 + Math.floor(Math.random() * 2), a0 = Math.random() * Math.PI;
+    const k = (q.beh.shards || 3) + Math.floor(Math.random() * 2), a0 = Math.random() * Math.PI;
     const segs = [];
     for (let i = 0; i < k; i++) {
       const a = a0 + (i / k) * Math.PI + (Math.random() - 0.5) * 0.5;
       const n = new THREE.Vector3(Math.cos(a), (Math.random() - 0.5) * 0.35, Math.sin(a)).normalize();
       segs.push({ n: n.toArray(), c: n.dot(W), bounds: [] });
     }
-    this.knifeCut(segs, { push: 0.7 });
+    this.knifeCut(segs, { push: b.def.snd === 'glass' ? 1.3 : 0.7 });
     // crumbs where the finger pushed in
-    const fx = b.def.fx === 'juice' ? 'juice' : b.def.fx === 'none' || b.def.fx === 'shave' ? 'crumb' : b.def.fx;
-    this.particles.burst(fx, W, 14, () => surfColor(b.def.in), 1.2, 1.1, { scale: 0.8 });
+    const fx = b.def.snd === 'glass' ? 'glass' : b.def.fx === 'juice' ? 'juice' : b.def.fx === 'none' || b.def.fx === 'shave' ? 'crumb' : b.def.fx;
+    this.particles.burst(fx, W, b.def.snd === 'glass' ? 40 : 14, () => surfColor(b.def.in), 1.2, 1.1, { scale: 0.8 });
+    this.audio.squishStop();
     this.audio.crack(b.def.snd);
+    this.shakeA = Math.max(this.shakeA || 0, 0.03);
     if (this.settings.haptics) this.ui.buzz([18, 30, 12]);
+    q.holding = false; q.cracked = true; this.knifeLift = 0;
+    this.stats.cuts++; this.savePrefs(); this.ui.onCut(this.stats.cuts);
+  };
+
+  // Squashed past the limit: soft/wet things burst into chunks that fly out,
+  // doughy things flatten into a pancake and squirt blobs to the sides.
+  P_.squishSplat = function () {
+    const q = this.sq, b = q.b, def = b.def, W = q.cw.clone();
+    b.uni.pressH.value = 0;
+    if (!q.pushed) { this.undoStack.push(q.snap); q.snap.curls = this.curls.length; q.snap.dice = this.dice.count; this.ui.onUndo(this.undoStack.length); q.pushed = true; }
+    const wet = ['jelly', 'slime', 'fruit'].includes(def.snd) || q.beh.style === 'elastic';
+    // blobs coloured from the material near the finger
+    const inv = b.mesh.quaternion.clone().invert();
+    const cl = W.clone().sub(b.mesh.position).applyQuaternion(inv);
+    const col = new THREE.Color();
+    const n = wet ? 70 : 45;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * q.P.R * 1.2;
+      patColor(def.in, cl.x + Math.cos(a) * r, Math.max(0.02, cl.y - Math.random() * q.h), cl.z + Math.sin(a) * r, col);
+      const sp = 1.4 + Math.random() * 2.6;
+      const v = new THREE.Vector3(Math.cos(a) * sp, 0.8 + Math.random() * 2.2, Math.sin(a) * sp);
+      const at = W.clone().add(new THREE.Vector3(Math.cos(a) * r, -q.h * 0.6, Math.sin(a) * r));
+      this.particles.spawn(def.snd === 'sand' ? 'sand' : 'blob', at, v, col.clone(), { scale: def.snd === 'sand' ? 1.6 : 1 });
+    }
+    if (def.fx === 'juice' || wet) this.particles.burst('juice', W, 25, () => surfColor(def.in), 2, 1.4, { scale: 1 });
+    if (wet) {
+      // burst: real chunks flying outward
+      // chunky pieces: two cracks through the finger plus a few offset ones
+      const segs = [], a0 = Math.random() * Math.PI;
+      for (let i = 0; i < 5; i++) {
+        const a = a0 + i * 1.1 + (Math.random() - 0.5) * 0.5;
+        const nn = new THREE.Vector3(Math.cos(a), (Math.random() - 0.5) * 0.25, Math.sin(a)).normalize();
+        const off = i < 2 ? 0 : (Math.random() < 0.5 ? -1 : 1) * (0.18 + Math.random() * 0.25);
+        segs.push({ n: nn.toArray(), c: nn.dot(W) + off, bounds: [] });
+      }
+      const hn = new THREE.Vector3(0, 1, 0); segs.push({ n: hn.toArray(), c: W.y - q.h - 0.08, bounds: [] });
+      this.knifeCut(segs, { push: 2.6 });
+      for (const nb of this.bodies) if (nb.def === def) nb.wobV = 1;
+    } else {
+      // flatten: an affine squash keeps every part convex and every face planar
+      const P = q.P, u = P.u, ky = 0.42, kl = 1.32;
+      const c = P.c, cu = c[0] * u[0] + c[1] * u[1] + c[2] * u[2];
+      const mapP = (x, y, z) => {
+        const hp = x * u[0] + y * u[1] + z * u[2];
+        const lx = x - hp * u[0] - (c[0] - cu * u[0]), ly = y - hp * u[1] - (c[1] - cu * u[1]), lz = z - hp * u[2] - (c[2] - cu * u[2]);
+        const nh = P.base + (hp - P.base) * ky;
+        return [c[0] - cu * u[0] + lx * kl + nh * u[0], c[1] - cu * u[1] + ly * kl + nh * u[1], c[2] - cu * u[2] + lz * kl + nh * u[2]];
+      };
+      const mapN = (x, y, z) => { const a = x * u[0] + y * u[1] + z * u[2]; const v = [(x - a * u[0]) / kl + a * u[0] / ky, (y - a * u[1]) / kl + a * u[1] / ky, (z - a * u[2]) / kl + a * u[2] / ky]; const l = Math.hypot(...v) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+      b.parts = b.parts.map(part => {
+        const np = new Part(part.faces.map(f => {
+          const pts = [], nrm = f.nrm ? [] : null;
+          for (let i = 0; i < f.pts.length; i += 3) { pts.push(...mapP(f.pts[i], f.pts[i + 1], f.pts[i + 2])); if (nrm) nrm.push(...mapN(f.nrm[i], f.nrm[i + 1], f.nrm[i + 2])); }
+          let plane = null;
+          if (f.plane) { const nn = mapN(...f.plane.n); plane = { n: nn, c: nn[0] * pts[0] + nn[1] * pts[1] + nn[2] * pts[2] }; }
+          return new Face(pts, nrm, f.type, plane);
+        }));
+        np.deformed = part.deformed;
+        return np;
+      });
+      this.squishRebuild(b);
+      const lin = this.physics.vel(b.h), ang = this.physics.angvel(b.h);
+      this.physics.remove(b.h);
+      b.h = this.physics.create(b.parts, b.mesh.position, b.mesh.quaternion, lin, ang, b.def.mat.density || 1);
+      b.wobV = 1;
+    }
+    this.audio.squishStop();
+    this.audio.splat(def.snd);
+    this.shakeA = Math.max(this.shakeA || 0, 0.05);
+    if (this.settings.haptics) this.ui.buzz([30, 40, 20]);
     q.holding = false; q.cracked = true; this.knifeLift = 0;
     this.stats.cuts++; this.savePrefs(); this.ui.onCut(this.stats.cuts);
   };
 
   P_.squishEnd = function () {
     const q = this.sq; this.knifeLift = 0;
+    this.audio.squishStop();
     if (!q) return;
     this.sq = null;
     if (!q.b || q.cracked || !this.bodies.includes(q.b)) return;

@@ -20,7 +20,7 @@ import { makeMaterial, surfColor } from './materials.js';
 // ============================================================================
 
 const STEP = 0.04;          // world units of blade travel per geometry update
-const MAX_STEPS = 6;        // per frame
+const MAX_STEPS = 10;       // per frame (steps grow when the blade falls behind)
 const UP = new THREE.Vector3(0, 1, 0);
 
 // How each material reacts. Derived from the catalog's sound/fx tags so all
@@ -38,6 +38,7 @@ export function behavior(def) {
   else if (s === 'jelly' || s === 'slime') Object.assign(B, { style: 'chunk', rate: 24, sink: 3.5, react: 0.45 });
   else if (s === 'clay') Object.assign(B, { style: 'chunk', rate: 11, sink: 1.8, react: 0.12 });
   else if (s === 'ice') Object.assign(B, { style: 'crumble', rate: 7, sink: 1.2, react: 0 });
+  else if (s === 'glass') Object.assign(B, { style: 'crumble', rate: 6, sink: 1, react: 0 });
   else if (s === 'sand') Object.assign(B, { style: 'crumble', rate: 20, sink: 3, react: 0.02 });
   else if (s === 'cake' || s === 'bread' || s === 'foam') Object.assign(B, { style: 'crumble', rate: 16, sink: 2.6, react: 0.08 });
   return Object.assign(B, def.live || {});
@@ -221,18 +222,31 @@ export function installLive(Game, helpers) {
     const beh = s.contactBody ? behavior(s.contactBody.def) : { rate: 18, sink: 3 };
     if (F) {
       // the blade follows the finger with material-dependent resistance
-      const k = 1 - Math.exp(-beh.rate * (s.contactBody ? 1 : 1.8) * dt * (this.slow ? 0.35 : 1));
+      const k = 1 - Math.exp(-beh.rate * 1.9 * (s.contactBody ? 1 : 1.8) * dt * (this.slow ? 0.35 : 1));
       const prevK = s.K.clone();
       s.K.lerp(F, k);
       const mv = s.K.distanceTo(prevK);
       s.speed = s.speed * 0.8 + (mv / Math.max(dt, 1e-3)) * 0.2 * 0.25;
+      s.swT = (s.swT || 0) - dt;
+      if (!s.inMat && s.speed > 1.0 && s.swT <= 0 && this.settings.sound) { this.audio.swish(s.speed); s.swT = 0.35; }
     }
-    // advance the cut in fixed steps along the blade's path
+    const steps = this.liveAdvance(s, tool, F, MAX_STEPS);
+    if (steps) this.liveCommitVisuals(s, tool);
+    this.livePose(s, tool, dt);
+    // curl / chunk follow the blade
+    if (s.curl) s.curl.layout(this.curlAnchor(s), s.dir || new THREE.Vector3(1, 0, 0), new THREE.Vector3(-(s.dir || UP).z, 0, (s.dir || UP).x).normalize());
+    if (s.chunk) this.chunkLayout(s);
+  };
+
+  // Advance the cut along the blade's path. Steps get longer when the blade is
+  // far behind (fast swipes on slow phones), so the cut never lags behind.
+  P.liveAdvance = function (s, tool, F, maxSteps) {
     let steps = 0;
-    while (steps < MAX_STEPS) {
+    while (steps < maxSteps) {
       const d = s.K.clone().sub(s.last); d.y = 0;
       const L = d.length();
       if (L < STEP) break;
+      const stepLen = L > 0.3 ? Math.min(0.12, L / 5) : STEP;
       d.normalize();
       // keep one direction for a straight run; start a new run only when the
       // blade's path leaves the current line by more than ~2 cm
@@ -244,16 +258,12 @@ export function installLive(Game, helpers) {
         const off = s.K.clone().sub(s.runA).dot(nrm);
         if (Math.abs(off) > 0.03 || s.dir.dot(d) < 0) { s.dir = est(); s.runA = s.last.clone(); }
       }
-      const B = s.last.clone().addScaledVector(d, STEP); // follow the real path; side planes come from the run
+      const B = s.last.clone().addScaledVector(d, stepLen); // follow the real path; side planes come from the run
       this.liveSegment(s, s.last.clone(), B, s.dir.clone(), tool, s.runA);
-      s.fingerS += STEP; s.travel += STEP; s.last.copy(B);
+      s.fingerS += stepLen; s.travel += stepLen; s.last.copy(B);
       steps++;
     }
-    if (steps) this.liveCommitVisuals(s, tool);
-    this.livePose(s, tool, dt);
-    // curl / chunk follow the blade
-    if (s.curl) s.curl.layout(this.curlAnchor(s), s.dir || new THREE.Vector3(1, 0, 0), new THREE.Vector3(-(s.dir || UP).z, 0, (s.dir || UP).x).normalize());
-    if (s.chunk) this.chunkLayout(s);
+    return steps;
   };
 
   // One step of real material removal between A and B.
@@ -309,7 +319,7 @@ export function installLive(Game, helpers) {
       s.segs.push({ A: A.clone(), B: B.clone(), t: t.clone(), anchor: anchor.clone(), partial: false, floorY, tilt: 0, width });
     } else if (isKnife) {
       s.tip = Math.min(s.tip, top);
-      s.tip = Math.max(-0.01, s.tip - STEP * beh.sink);
+      s.tip = Math.max(-0.01, s.tip - A.distanceTo(B) * beh.sink);
       floorY = s.tip <= 0.002 ? -1 : s.tip;
       s.segs.push({ A: A.clone(), B: B.clone(), t: t.clone(), anchor: anchor.clone(), partial: floorY > -1, floorY, tilt: this.tilt, width });
     } else {
@@ -345,7 +355,7 @@ export function installLive(Game, helpers) {
       let made = 0;
       for (const r of removed) made += this.dice.addFromPart(r.b, r.part, size, back, r.b.def);
       s.diced = (s.diced || 0) + made;
-      s.chop = (s.chop || 0) + STEP;
+      s.chop = (s.chop || 0) + A.distanceTo(B);
       if (s.chop > 0.09) { s.chop = 0; this.audio.chop(body0.def.snd, made); }
     } else if (isKnife) this.knifeSpray(s, B, top, body0, vol);
     else this.peelMaterial(s, A, B, t, n, top, floorY, removed, beh);
@@ -380,7 +390,7 @@ export function installLive(Game, helpers) {
       const width = this.tool.width * (this.ui.widthScale || 1);
       const th = Math.max(0.006, top - floorY);
       const sideL = n.clone().applyQuaternion(inv).normalize();
-      const k = Math.max(1, Math.round(STEP / STEP_S));
+      const k = Math.max(1, Math.round(A.distanceTo(B) / STEP_S));
       for (let i = 0; i < k; i++) {
         const p = A.clone().lerp(B, (i + 1) / k);
         const tp = p.clone(); tp.y = top - 0.002; const bt = p.clone(); bt.y = floorY + 0.002;
@@ -472,6 +482,7 @@ export function installLive(Game, helpers) {
         this.applyChanges(new Map([[b, use]]), [{ n: n.toArray(), c: n.dot(s.last) }], { ...tool, push: (tool.push || 1) * 0.45 });
         for (const nb of this.bodies) if (!before.has(nb)) s.orig.set(nb, { parts: nb.parts, seg0: s.segs.length, pseg0: s.psegs.length });
         this.audio.finish(b.def.snd, tool, 1);
+        this.shakeA = Math.max(this.shakeA || 0, 0.012 * (tool.weight || 1));
         if (this.settings.haptics) this.ui.buzz(Math.round(12 + 10 * (tool.weight || 1)));
         s.separated = true;
       } else {
@@ -514,7 +525,8 @@ export function installLive(Game, helpers) {
       k.scale.setScalar(this.knifeScale);
       // place the blade so its tip is at the cut front; the edge rises behind it
       const L = tool.len * this.knifeScale;
-      const pitch = THREE.MathUtils.degToRad(tool.kind === 'knife' ? 10 : 0);
+      s.rock = (s.rock || 0) + dt * (6 + Math.min(10, s.speed * 6));
+      const pitch = THREE.MathUtils.degToRad(10 + (s.inMat ? Math.sin(s.rock) * 3.5 * Math.min(1, s.speed + 0.3) : 0));
       const tiltR = THREE.MathUtils.degToRad(-this.tilt);
       const upv = UP.clone().applyAxisAngle(t, tiltR);
       const z = new THREE.Vector3().crossVectors(t, upv).normalize();
@@ -614,6 +626,9 @@ export function installLive(Game, helpers) {
       if (hit) { const b = hit.object.userData.body; b.wobV = Math.max(b.wobV, 0.8 * (b.def.wob || 0.1)); this.audio.finish(b.def.snd, { weight: 0.3 }, 0); }
       return;
     }
+    // the blade first catches up with where the finger actually ended
+    const Fend = this.liveTarget(s);
+    if (Fend) { s.K.copy(Fend); if (this.liveAdvance(s, tool, Fend, 400)) this.liveCommitVisuals(s, tool); }
     if (tool.kind === 'knife' && s.dir) {
       // finish the stroke: follow through a little (or across the whole piece with a guide)
       let extra = s.inMat ? 0.25 : 0.06;

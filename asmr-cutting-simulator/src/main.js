@@ -12,7 +12,7 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 // ---------------------------------------------------------------- UI bridge
 const ui = {
   widthScale: 1, depthScale: 1, cameraMode: false,
-  onObject(def) { $('#objName').textContent = def.name; $$('.obj').forEach(e => e.classList.toggle('on', e.dataset.id === def.id)); },
+  onObject(def, count = 1) { $('#objName').textContent = count > 1 ? `Salad · ${count} items` : def.name; $$('.obj').forEach(e => e.classList.toggle('on', e.dataset.id === def.id)); },
   onUndo(n) { $('#undoBtn').disabled = n === 0; },
   onCut(n) {
     for (const t of TOOLS) if (t.unlock === n) toast(`Unlocked: ${t.name}`);
@@ -24,6 +24,12 @@ const ui = {
     $('#cubeN').textContent = n.toLocaleString();
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   },
+  onBowl(view, removed) {
+    $('#mixBtn').hidden = !view;
+    $('#bowlBtn').classList.toggle('on', !!view);
+    if (removed) $('#bowlBtn').classList.remove('on');
+  },
+  toast: (m) => toast(m),
   hideHint() { $('#hint').classList.add('gone'); },
   buzz(ms) {
     if (!game.settings.haptics) return;
@@ -111,7 +117,11 @@ function renderObjects() {
     const b = document.createElement('button'); b.className = 'obj' + (game.current && game.current.id === o.id ? ' on' : ''); b.dataset.id = o.id;
     const th = thumbs.get(o.id);
     b.innerHTML = `<div class="thumb">${th ? `<img src="${th}" alt="">` : `<i style="background:linear-gradient(135deg,${o.out.c[0]},${o.in.c[0]})"></i>`}</div><span>${o.name}</span>`;
-    b.onclick = () => { game.spawn(o.id); closeSheets(); };
+    b.onclick = () => {
+      if (ui.addMode) { game.addObject(o.id); toast(`Added ${o.name}`); }
+      else game.spawn(o.id);
+      closeSheets();
+    };
     g.appendChild(b);
   }
   queueThumbs(list);
@@ -186,6 +196,14 @@ $$('.sheet-card').forEach(card => {
 
 // ---------------------------------------------------------------- controls
 $('#objBtn').onclick = () => openSheet('#objSheet');
+$('#addMode').onclick = (e) => { ui.addMode = !ui.addMode; e.currentTarget.setAttribute('aria-pressed', ui.addMode); toast(ui.addMode ? 'Tap objects to add them to the board' : 'Tap an object to replace the board'); };
+$('#bowlBtn').onclick = () => {
+  game.audio.unlock();
+  if (!game.bowl) game.toggleBowl();               // bring the bowl, everything flies in
+  else if (game.bowlView) game.toggleBowl();       // back to the board
+  else game.gatherIntoBowl();                      // newly cut pieces fly in too
+};
+$('#mixBtn').onclick = () => { game.audio.unlock(); game.tossBowl(); };
 $('#setBtn').onclick = () => openSheet('#setSheet');
 $('#search').oninput = () => renderObjects();
 $('#undoBtn').onclick = () => game.undo();

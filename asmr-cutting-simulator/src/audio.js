@@ -23,12 +23,14 @@ const PROFILES = {
   ice:    { f: 5200, q: 2.5, d: 0.01, rate: 30, g: 0.55, crisp: 1.5, ice: 1 },
   choc:   { f: 3200, q: 1.6, d: 0.012, rate: 26, g: 0.6, crisp: 1, snap: 1 },
   soft:   { f: 1500, q: 0.8, d: 0.04, rate: 50, g: 0.3 },
+  glass:  { f: 6800, q: 3.0, d: 0.008, rate: 34, g: 0.5, crisp: 1.6, ice: 1, glass: 1 },
 };
 
 export class Audio {
   constructor() {
     this.ctx = null; this.enabled = true; this.volume = 0.9; this.slow = 1;
     this.grainClock = 0;
+    this.objPitch = 1;   // set per object: smaller things sound higher
   }
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
@@ -66,7 +68,7 @@ export class Audio {
     src.buffer = P.wet ? this.pink : this.noise;
     src.playbackRate.value = (0.85 + Math.random() * 0.3) * (sl < 1 ? 0.7 : 1);
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
-    bp.frequency.value = P.f * (0.75 + Math.random() * 0.5) * (tool.pitch || 1) * (sl < 1 ? 0.7 : 1);
+    bp.frequency.value = P.f * (0.75 + Math.random() * 0.5) * (tool.pitch || 1) * this.objPitch * (sl < 1 ? 0.7 : 1);
     bp.Q.value = P.q;
     const g = ctx.createGain();
     const dur = P.d * (0.7 + Math.random() * 0.6) / Math.max(sl, 0.4);
@@ -147,8 +149,90 @@ export class Audio {
     if (!this.ok) return;
     const t = this.ctx.currentTime;
     this.thump(t, 95, 0.4);
+    if (prof === 'glass' || prof === 'ice') { this.shatter(); if (prof === 'glass') return; }
     for (let i = 0; i < 9; i++) this.grain(prof === 'soap' ? 'soap' : 'choc', 1, t + i * 0.006 + Math.random() * 0.02, { pitch: 0.9 + Math.random() * 0.4 });
     for (let i = 0; i < 5; i++) this.grain('crunch', 0.8, t + 0.03 + i * 0.03 + Math.random() * 0.02, { pitch: 1 });
+  }
+  // ---- extra layers for variety -------------------------------------------
+  noiseBurst(t, f0, f1, q, amp, dur, type = 'bandpass', pink = false) {
+    const ctx = this.ctx, src = ctx.createBufferSource(); src.buffer = pink ? this.pink : this.noise;
+    const bp = ctx.createBiquadFilter(); bp.type = type; bp.Q.value = q;
+    bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(amp, t + Math.min(0.01, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(this.master); src.start(t, Math.random() * 1.5, dur + 0.05);
+  }
+  // air whoosh when the blade moves fast above the board
+  swish(speed) {
+    if (!this.ok) return;
+    const t = this.ctx.currentTime, a = Math.min(0.18, 0.05 + speed * 0.04);
+    this.noiseBurst(t, 900, 3800 + Math.random() * 1500, 0.8, a, 0.22, 'bandpass');
+  }
+  // a piece lands on the board: weight sets the pitch/volume
+  land(mass, prof) {
+    if (!this.ok) return;
+    const t = this.ctx.currentTime, P = PROFILES[prof] || PROFILES.soft;
+    const m = Math.min(1, mass);
+    this.thump(t, 120 + (1 - m) * 160 + Math.random() * 30, 0.08 + m * 0.22);
+    this.noiseBurst(t, 2400 + Math.random() * 800, 1200, 1.4, 0.05 + m * 0.08, 0.05);
+    if (P.wet) this.squelch(t + 0.01, 0.08 + m * 0.1, 0);
+    if (P.glass || P.ice) this.tone(t, 3000 + Math.random() * 3000, 0.02, 0.12);
+  }
+  // diced cubes pattering onto the board / pile
+  pitter(n, prof) {
+    if (!this.ok || n <= 0) return;
+    const t = this.ctx.currentTime, P = PROFILES[prof] || PROFILES.soft;
+    const k = Math.min(6, Math.ceil(n / 6));
+    for (let i = 0; i < k; i++) {
+      const tt = t + Math.random() * 0.03;
+      this.noiseBurst(tt, 2200 + Math.random() * 2200, 1500, 2.5, 0.05 + Math.random() * 0.05, 0.03);
+      if (Math.random() < 0.35) this.tone(tt, 700 + Math.random() * 500, 0.025, 0.04);
+      if (P.wet && Math.random() < 0.3) this.squelch(tt, 0.05, 0);
+    }
+  }
+  // continuous wet/crumbly squish while pressing
+  squishStart(prof) {
+    if (!this.ok) return;
+    this.squishStop();
+    const ctx = this.ctx, P = PROFILES[prof] || PROFILES.soft;
+    const src = ctx.createBufferSource(); src.buffer = P.wet || prof === 'clay' || prof === 'jelly' ? this.pink : this.noise; src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3; bp.frequency.value = P.f * 0.6;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2500;
+    const g = ctx.createGain(); g.gain.value = 0;
+    src.connect(bp); bp.connect(lp); lp.connect(g); g.connect(this.master); src.start();
+    this.sq = { src, bp, g, P, prof, base: P.f * 0.6 };
+  }
+  squishSet(rate, depth) {
+    const q = this.sq; if (!q || !this.ok) return;
+    const t = this.ctx.currentTime;
+    q.g.gain.setTargetAtTime(Math.min(0.5, rate * 2.2) * (q.P.g + 0.15), t, 0.03);
+    q.bp.frequency.setTargetAtTime(q.base * (0.7 + depth * 1.6) * (0.9 + Math.random() * 0.2), t, 0.05);
+    if (q.P.wet && Math.random() < rate * 0.6) this.squelch(t, 0.12 * Math.min(1, rate * 3), q.P.bloop);
+    if ((q.P.crisp || q.prof === 'sand' || q.prof === 'foam') && Math.random() < rate * 0.8) this.grain(q.prof, 0.6, t, { pitch: 0.9 });
+  }
+  squishStop() {
+    const q = this.sq; if (!q) return; this.sq = null;
+    try { q.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.04); q.src.stop(this.ctx.currentTime + 0.3); } catch { /* ignore */ }
+  }
+  // big squash: wet splat or crumbly burst
+  splat(prof) {
+    if (!this.ok) return;
+    const t = this.ctx.currentTime, P = PROFILES[prof] || PROFILES.soft;
+    this.thump(t, 70, 0.5);
+    if (P.wet || prof === 'clay' || prof === 'slime' || prof === 'jelly' || prof === 'fruit') {
+      this.noiseBurst(t, 1800, 180, 2, 0.5, 0.35, 'lowpass', true);
+      for (let i = 0; i < 6; i++) this.squelch(t + 0.03 + i * 0.05 + Math.random() * 0.03, 0.22 / (1 + i * 0.4), 1);
+    } else {
+      this.noiseBurst(t, 5000, 900, 0.7, 0.35, 0.4, 'bandpass');
+      for (let i = 0; i < 10; i++) this.grain(prof, 0.9, t + i * 0.015 + Math.random() * 0.02, { pitch: 1 });
+    }
+  }
+  // glass breaking: a bright crash and a shower of tinkles
+  shatter() {
+    if (!this.ok) return;
+    const t = this.ctx.currentTime;
+    this.noiseBurst(t, 9000, 3000, 0.6, 0.45, 0.25, 'highpass');
+    this.thump(t, 140, 0.25);
+    for (let i = 0; i < 22; i++) this.tone(t + 0.02 + Math.random() * 0.6 * Math.random(), 2500 + Math.random() * 6500, 0.03 + Math.random() * 0.03, 0.08 + Math.random() * 0.25);
   }
   ui() { if (this.ok) this.tone(this.ctx.currentTime, 1400, 0.025, 0.05); }
 }
