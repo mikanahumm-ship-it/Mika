@@ -231,11 +231,13 @@ export class Game {
   applyQuality() {
     const hi = this.settings.quality === 'high';
     this.mobile = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
-    this.prCap = Math.min(window.devicePixelRatio, hi ? (this.mobile ? 1.6 : 1.75) : 1.0);
-    this.pr = this.mobile ? Math.min(this.prCap, 1.25) : this.prCap;
+    // sharp by default: render at the screen's real density (up to 2x)
+    this.prCap = Math.min(window.devicePixelRatio, hi ? 2 : 1.25);
+    this.prMin = Math.min(this.prCap, hi ? 1.5 : 1);
+    this.pr = this.prCap;
     this.renderer.setPixelRatio(this.pr);
     this.renderer.shadowMap.enabled = true;
-    if (this.sun) { this.sun.castShadow = true; this.sun.shadow.mapSize.set(hi && !this.mobile ? 1536 : 1024, hi && !this.mobile ? 1536 : 1024); }
+    if (this.sun) { this.sun.castShadow = true; this.sun.shadow.mapSize.set(hi ? 2048 : 1024, hi ? 2048 : 1024); }
   }
   adaptQuality(rdt) {
     this.ft = this.ft ? this.ft * 0.95 + rdt * 0.05 : rdt;
@@ -245,7 +247,8 @@ export class Game {
     this.qT = 0;
     let pr = this.pr;
     // only step down, at most twice: every resize costs a visible hitch
-    if (this.ft > 1 / 42 && pr > 0.75 && (this.prSteps || 0) < 2) { pr = Math.max(0.75, pr - 0.2); this.prSteps = (this.prSteps || 0) + 1; }
+    // a small step down only if it is really struggling, never below prMin (keeps it sharp)
+    if (this.ft > 1 / 30 && pr > this.prMin && (this.prSteps || 0) < 1) { pr = Math.max(this.prMin, pr - 0.25); this.prSteps = (this.prSteps || 0) + 1; }
     if (pr !== this.pr) { this.pr = pr; this.renderer.setPixelRatio(pr); this.resize(); }
     // Note: shadows are never switched at runtime: changing the light setup
     // makes every shader recompile, which freezes the game for a moment.
