@@ -8,6 +8,7 @@ import { Audio } from './audio.js';
 import { Particles } from './particles.js';
 import { installLive } from './live.js';
 import { Dice } from './dice.js';
+import { installSquish } from './squish.js';
 
 const GRAVITY = 55;          // world units are ~10 cm; slightly dreamy gravity
 const BOARD = { hx: 3.6, hz: 2.4, h: 0.28 };
@@ -89,26 +90,30 @@ class Physics {
 }
 
 function hullPoints(part) {
-  // Unique vertices; cap (cut) vertices are always kept so cut faces collide
-  // exactly, smooth outer-surface vertices are thinned to keep hulls cheap.
-  const seen = new Set(), caps = [], outer = [];
+  // Even spatial sampling: one vertex per grid cell, so dense regions (a
+  // squished dent, a fine cut) don't crowd out the corners that support the
+  // piece. Cut (cap) vertices are always kept so cut faces collide exactly.
+  const { mn, mx } = part.bounds();
+  const cs = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) / 9 || 1;
+  const seen = new Set(), out = [];
   for (const f of part.faces) {
-    const dst = f.type === 0 ? outer : caps;
+    const keepAll = f.type === 1 && !part.deformed;
     for (let i = 0; i < f.pts.length; i += 3) {
-      const k = (Math.round(f.pts[i] * 500) * 73856093) ^ (Math.round(f.pts[i + 1] * 500) * 19349663) ^ (Math.round(f.pts[i + 2] * 500) * 83492791);
-      if (seen.has(k)) continue; seen.add(k); dst.push(f.pts[i], f.pts[i + 1], f.pts[i + 2]);
+      const x = f.pts[i], y = f.pts[i + 1], z = f.pts[i + 2];
+      const k = keepAll ? 'c' + Math.round(x * 500) + ',' + Math.round(y * 500) + ',' + Math.round(z * 500)
+        : Math.floor((x - mn[0]) / cs) + ',' + Math.floor((y - mn[1]) / cs) + ',' + Math.floor((z - mn[2]) / cs);
+      if (seen.has(k)) continue; seen.add(k); out.push(x, y, z);
     }
   }
-  const nOut = outer.length / 3, budget = Math.max(24, 140 - caps.length / 3);
-  if (nOut > budget) {
-    const step = nOut / budget, thin = [];
-    for (let j = 0; j < budget; j++) { const i = Math.floor(j * step) * 3; thin.push(outer[i], outer[i + 1], outer[i + 2]); }
-    return new Float32Array(caps.concat(thin));
+  // extremes along the axes are always part of the hull
+  for (let a = 0; a < 3; a++) for (const pick of [mn, mx]) {
+    let best = null, bd = Infinity;
+    for (const f of part.faces) for (let i = 0; i < f.pts.length; i += 3) { const d = Math.abs(f.pts[i + a] - pick[a]); if (d < bd) { bd = d; best = [f.pts[i], f.pts[i + 1], f.pts[i + 2]]; } }
+    if (best) out.push(...best);
   }
-  return new Float32Array(caps.concat(outer));
+  return new Float32Array(out);
 }
 
-// ============================================================ mesh building
 // Groups: 0 = outer surface, 1 = knife/peel cut surface, 2 = internal glue
 // faces (drawn with a depth offset so they never show as seams at the surface,
 // but still render where they are exposed, e.g. the walls of a groove).
@@ -253,8 +258,9 @@ export class Game {
   addBody(def, parts, pos, quat, lin, ang) {
     const h = this.physics.create(parts, pos, quat, lin, ang, def.mat.density || 1);
     const geo = buildGeometry(parts);
-    const uni = { wob: { value: 0 }, base: { value: geo.boundingBox.min.y }, height: { value: geo.boundingBox.max.y - geo.boundingBox.min.y } };
-    const shared = { wob: uni.wob, time: this.time, base: uni.base, height: uni.height };
+    const uni = { wob: { value: 0 }, base: { value: geo.boundingBox.min.y }, height: { value: geo.boundingBox.max.y - geo.boundingBox.min.y },
+      press: { value: new THREE.Vector4(0, 0, 0, 1) }, pressH: { value: 0 }, pressU: { value: new THREE.Vector3(0, 1, 0) }, pressBase: { value: 0 }, pressBulge: { value: 0.6 } };
+    const shared = { wob: uni.wob, time: this.time, base: uni.base, height: uni.height, press: uni.press, pressH: uni.pressH, pressU: uni.pressU, pressBase: uni.pressBase, pressBulge: uni.pressBulge };
     const mats = bodyMaterials(def, shared);
     const mesh = new THREE.Mesh(geo, mats);
     mesh.castShadow = true; mesh.receiveShadow = true;
@@ -506,10 +512,12 @@ export class Game {
     if (this.pointers.size >= 2 || orbitBtn || this.ui.cameraMode) {
       if (this.stroke) this.cancelStroke();
       if (this.grab) this.endGrab();
+      if (this.sq) this.squishEnd();
       this.gesture = { orbit: true }; return;
     }
     if (this.grabMode) { this.beginGrab(e); return; }
     for (const b of this.bodies) b.wbox = null;
+    if (this.tool.kind === 'squish') { this.squishBegin(e); return; }
     if (this.liveActive()) this.liveBegin(e); else this.beginStroke(e);
   }
   onMove(e) {
@@ -529,12 +537,14 @@ export class Game {
       return;
     }
     if (this.grab) { this.moveGrab(e); return; }
+    if (this.sq) { this.squishMove(e); return; }
     if (this.stroke) { if (this.stroke.live) this.liveMove(e); else this.moveStroke(e); }
   }
   onUp(e, cancel) {
     this.pointers.delete(e.pointerId);
     if (this.gesture) { if (this.pointers.size === 0) this.gesture = null; else this.gesture.d = 0; return; }
     if (this.grab) { this.endGrab(); return; }
+    if (this.sq) { this.squishEnd(); return; }
     if (this.stroke) { if (this.stroke.live) this.liveEnd(); else if (cancel) this.cancelStroke(); else this.endStroke(); }
   }
 
@@ -875,6 +885,7 @@ export class Game {
 
     if (this.grab) this.stepGrab();
     if (this.stroke && this.stroke.live) this.liveUpdate(rdt); else this.strokeTick();
+    this.squishUpdate(rdt);
     this.physics.step(rdt, scale);
     for (const b of [...this.bodies]) {
       if (b.h.sim) this.physics.simStep(b.h, dt);
@@ -891,7 +902,7 @@ export class Game {
       const s = this.stroke; const idle = performance.now() - s.pts[s.pts.length - 1].t > 90;
       if (s.inMat && !idle) this.audio.scrape(s.inMat.def.snd, s.speed * 3, rdt, this.tool);
     }
-    if (!(this.stroke && this.stroke.live)) this.poseKnife(rdt);
+    if (!(this.stroke && this.stroke.live) && this.tool.kind !== 'squish') this.poseKnife(rdt);
     if (!this.stroke && this.trail.visible) { this.trail.material.opacity *= Math.pow(0.02, rdt); if (this.trail.material.opacity < 0.02) this.trail.visible = false; }
     this.renderer.render(this.scene, this.camera);
   }
@@ -926,4 +937,5 @@ function rdp(P, eps) {
 }
 
 installLive(Game, { buildGeometry, bodyMaterials });
+installSquish(Game, { buildGeometry });
 export { Part };

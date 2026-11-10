@@ -62,7 +62,9 @@ function selectTool(id) {
   const t = game.tool;
   $('#sizeWrap').classList.toggle('hidden', t.kind === 'knife');
   $('#thickWrap').classList.toggle('hidden', t.kind === 'knife' || t.kind === 'dice');
-  $('#sizeLbl').textContent = t.kind === 'dice' ? 'Cube size' : 'Width';
+  $('#sizeLbl').textContent = t.kind === 'dice' ? 'Cube size' : t.kind === 'squish' ? 'Press size' : 'Width';
+  $('#thickWrap').classList.toggle('hidden', t.kind !== 'shave' && t.kind !== 'carve');
+  $$('[data-guide], .modebar .divider').forEach(b => b.classList.toggle('hidden', t.kind === 'squish' || t.kind === 'dice'));
   $('#tiltWrap').classList.toggle('hidden', t.kind !== 'knife' || game.mode !== 'vertical');
   $$('[data-mode]').forEach(b => b.classList.toggle('hidden', t.kind !== 'knife'));
 }
@@ -73,7 +75,7 @@ function renderToolSheet() {
     const ok = unlocked(t);
     const c = document.createElement('button');
     c.className = 'tcard' + (t.id === game.toolId ? ' on' : '') + (ok ? '' : ' locked');
-    const kind = { knife: 'Slice', shave: 'Shave', carve: 'Carve', dice: 'Dice into cubes' }[t.kind] + (t.path ? ` · ${t.path}` : '');
+    const kind = { knife: 'Slice', shave: 'Shave', carve: 'Carve', dice: 'Dice into cubes', squish: 'Press & squish' }[t.kind] + (t.path ? ` · ${t.path}` : '');
     c.innerHTML = toolIcon(t) + `<span>${t.name}</span><small>${ok ? kind : `🔒 ${t.unlock} cuts`}</small>`;
     c.onclick = () => { if (ok) selectTool(t.id); else toast(`Make ${t.unlock - game.stats.cuts} more cuts to unlock`); };
     g.appendChild(c);

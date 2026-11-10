@@ -103,13 +103,15 @@ export function splitPart(part, n, c, capType) {
   const [lo, hi] = part.range(n, c);
   if (lo >= -PEPS) return { front: part, back: null };
   if (hi <= PEPS) return { front: null, back: part };
-  const F = [], B = [], cap = [];
+  const F = [], B = [], cap = [], segs = [];
+  const deformed = part.deformed;
   for (const f of part.faces) {
     const p = f.pts, m = p.length / 3, nr = f.nrm;
     const d = new Array(m);
     let any = 0, allOn = true;
     for (let i = 0; i < m; i++) {
       d[i] = p[i * 3] * n[0] + p[i * 3 + 1] * n[1] + p[i * 3 + 2] * n[2] - c;
+      if (deformed && Math.abs(d[i]) <= PEPS) d[i] = PEPS * 1.5; // never exactly on the plane
       if (d[i] > PEPS) any |= 1; else if (d[i] < -PEPS) any |= 2;
       if (Math.abs(d[i]) > PEPS) allOn = false;
     }
@@ -120,7 +122,7 @@ export function splitPart(part, n, c, capType) {
     }
     if (any === 1 || any === 0) { F.push(f); collectOn(p, d, cap); continue; }
     if (any === 2) { B.push(f); collectOn(p, d, cap); continue; }
-    const fp = [], fn = [], bp = [], bn = [];
+    const fp = [], fn = [], bp = [], bn = [], fq = [];
     for (let i = 0; i < m; i++) {
       const j = (i + 1) % m;
       const di = d[i], dj = d[j];
@@ -131,15 +133,29 @@ export function splitPart(part, n, c, capType) {
       if ((di > PEPS && dj < -PEPS) || (di < -PEPS && dj > PEPS)) {
         const t = di / (di - dj);
         const q = [p[i * 3] + (p[j * 3] - p[i * 3]) * t, p[i * 3 + 1] + (p[j * 3 + 1] - p[i * 3 + 1]) * t, p[i * 3 + 2] + (p[j * 3 + 2] - p[i * 3 + 2]) * t];
-        fp.push(...q); bp.push(...q); cap.push(q);
+        fp.push(...q); bp.push(...q); cap.push(q); fq.push(q);
         if (nr) {
           const nq = norm([nr[i * 3] + (nr[j * 3] - nr[i * 3]) * t, nr[i * 3 + 1] + (nr[j * 3 + 1] - nr[i * 3 + 1]) * t, nr[i * 3 + 2] + (nr[j * 3 + 2] - nr[i * 3 + 2]) * t]);
           fn.push(...nq); bn.push(...nq);
         }
       }
     }
+    if (fq.length === 2) segs.push(fq);
     if (fp.length >= 9) F.push(new Face(fp, nr ? fn : null, f.type, f.plane));
     if (bp.length >= 9) B.push(new Face(bp, nr ? bn : null, f.type, f.plane));
+  }
+  if (deformed) {
+    // a dented part is no longer convex: trace the real cross-section outline
+    const tris = buildCapChain(segs, n);
+    if (tris && F.length && B.length) {
+      const nn = [-n[0], -n[1], -n[2]];
+      for (const t of tris) {
+        F.push(new Face([...t[0], ...t[2], ...t[1]], null, capType, { n: nn, c: -c }));
+        B.push(new Face([...t[0], ...t[1], ...t[2]], null, capType, { n: n.slice(), c }));
+      }
+      const fr = new Part(F), bk = new Part(B); fr.deformed = bk.deformed = true;
+      return { front: fr, back: bk };
+    }
   }
   const poly = buildCap(cap, n);
   if (!poly || F.length === 0 || B.length === 0) {
@@ -149,7 +165,83 @@ export function splitPart(part, n, c, capType) {
   const nn = [-n[0], -n[1], -n[2]];
   F.push(new Face(poly.rev, null, capType, { n: nn, c: -c }));
   B.push(new Face(poly.fwd, null, capType, { n: n.slice(), c }));
-  return { front: new Part(F), back: new Part(B) };
+  const fr = new Part(F), bk = new Part(B);
+  if (deformed) fr.deformed = bk.deformed = true;
+  return { front: fr, back: bk };
+}
+
+// Cross-section of a non-convex part: chain the per-face segments into closed
+// loops and triangulate each loop (ear clipping). Returns triangles wound CCW
+// around +n, or null if the outline can't be closed.
+function buildCapChain(segs, n) {
+  if (segs.length < 3) return null;
+  const [u, v] = planeBasis(n);
+  // merge points closer than ~0.1 mm into one vertex (sliver triangles produce near-duplicates)
+  const TOL = 1.2e-4, cell = new Map(), pts = [];
+  const vid = (q) => {
+    const cx = Math.floor(q[0] / TOL), cy = Math.floor(q[1] / TOL), cz = Math.floor(q[2] / TOL);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+      const l = cell.get((cx + a) + ',' + (cy + b) + ',' + (cz + c));
+      if (l) for (const i of l) { const p = pts[i]; if (Math.abs(p[0] - q[0]) < TOL && Math.abs(p[1] - q[1]) < TOL && Math.abs(p[2] - q[2]) < TOL) return i; }
+    }
+    const k = cx + ',' + cy + ',' + cz; if (!cell.has(k)) cell.set(k, []); cell.get(k).push(pts.length); pts.push(q); return pts.length - 1;
+  };
+  segs = segs.map(sg => [vid(sg[0]), vid(sg[1])]).filter(sg => sg[0] !== sg[1]);
+  if (segs.length < 3) return null;
+  const key = (i) => i;
+  const at = new Map();
+  segs.forEach((sg, i) => { for (const e of [0, 1]) { const k = sg[e]; if (!at.has(k)) at.set(k, []); at.get(k).push(i); } });
+  const used = new Uint8Array(segs.length), tris = [];
+  for (let s0 = 0; s0 < segs.length; s0++) {
+    if (used[s0]) continue;
+    const ids = [segs[s0][0]]; let cur = segs[s0][1]; used[s0] = 1;
+    for (let guard = 0; guard < segs.length; guard++) {
+      if (cur === ids[0]) break;
+      ids.push(cur);
+      let cand = (at.get(cur) || []).find(i => !used[i]);
+      let from = cur;
+      if (cand === undefined) {
+        // dead end (tiny hole in the source mesh): bridge to the nearest loose end
+        let bd = 0.03 * 0.03, best = -1, bend = 0;
+        const pc = pts[cur];
+        for (let i = 0; i < segs.length; i++) if (!used[i]) for (const e of [0, 1]) {
+          const q = pts[segs[i][e]], d2 = (q[0] - pc[0]) ** 2 + (q[1] - pc[1]) ** 2 + (q[2] - pc[2]) ** 2;
+          if (d2 < bd) { bd = d2; best = i; bend = e; }
+        }
+        const p0 = pts[ids[0]], d0 = (p0[0] - pc[0]) ** 2 + (p0[1] - pc[1]) ** 2 + (p0[2] - pc[2]) ** 2;
+        if (best < 0 || d0 <= bd) break; // close the loop back to its start
+        cand = best; from = segs[best][bend];
+      }
+      used[cand] = 1;
+      cur = segs[cand][0] === from ? segs[cand][1] : segs[cand][0];
+    }
+    const loop = ids.map(i => pts[i]);
+    if (loop.length < 3) continue;
+    const P = loop.map(q => ({ q, x: dot(q, u), y: dot(q, v) }));
+    void key;
+    let area = 0; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length]; area += a.x * b.y - b.x * a.y; }
+    if (Math.abs(area) < 1e-9) continue;
+    if (area < 0) P.reverse();
+    // ear clipping
+    const idx = P.map((_, i) => i);
+    const cr = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    const inTri = (p, a, b, c) => cr(a, b, p) >= -1e-12 && cr(b, c, p) >= -1e-12 && cr(c, a, p) >= -1e-12;
+    let guard = 0;
+    while (idx.length > 3 && guard++ < 10000) {
+      let clipped = false;
+      for (let i = 0; i < idx.length; i++) {
+        const a = P[idx[(i + idx.length - 1) % idx.length]], b = P[idx[i]], c = P[idx[(i + 1) % idx.length]];
+        if (cr(a, b, c) <= 1e-14) continue;
+        let ok = true;
+        for (const j of idx) { const p = P[j]; if (p === a || p === b || p === c) continue; if (inTri(p, a, b, c)) { ok = false; break; } }
+        if (!ok) continue;
+        tris.push([a.q, b.q, c.q]); idx.splice(i, 1); clipped = true; break;
+      }
+      if (!clipped) break; // degenerate outline: give up on the rest
+    }
+    if (idx.length === 3) tris.push([P[idx[0]].q, P[idx[1]].q, P[idx[2]].q]);
+  }
+  return tris.length ? tris : null;
 }
 
 function collectOn(p, d, cap) {
@@ -194,6 +286,93 @@ function buildCap(pts, n) {
   for (const h of hull) fwd.push(...h.q);
   for (let i = hull.length - 1; i >= 0; i--) rev.push(...hull[i].q);
   return { fwd, rev };
+}
+
+// ---------------------------------------------------------------- refinement
+// Subdivide visible faces (outer + cut) near `center` so a dent can bend them.
+// Edges are split globally by key, so neighbouring triangles (also across
+// parts) stay crack-free. Glue faces are internal and left untouched.
+export function refineParts(parts, center, up, radius, maxEdge) {
+  const lat = (p) => { const dx = p[0] - center[0], dy = p[1] - center[1], dz = p[2] - center[2]; const a = dx * up[0] + dy * up[1] + dz * up[2]; return Math.hypot(dx - a * up[0], dy - a * up[1], dz - a * up[2]); };
+  const K = (p) => Math.round(p[0] * 1e5) + ',' + Math.round(p[1] * 1e5) + ',' + Math.round(p[2] * 1e5);
+  // 1) visible faces near the press -> triangles {p:[a,b,c], n:[na,nb,nc]|null, type, plane}
+  const work = parts.map(part => {
+    const keep = [], tris = [];
+    for (const f of part.faces) {
+      const m = f.pts.length / 3;
+      let near = false;
+      if (f.type !== 2) {
+        // face reaches the region if its centroid is within radius + its own extent
+        let cx = 0, cy = 0, cz = 0;
+        for (let i = 0; i < m; i++) { cx += f.pts[i * 3]; cy += f.pts[i * 3 + 1]; cz += f.pts[i * 3 + 2]; }
+        const ce = [cx / m, cy / m, cz / m];
+        let ext = 0; for (let i = 0; i < m; i++) ext = Math.max(ext, Math.hypot(f.pts[i * 3] - ce[0], f.pts[i * 3 + 1] - ce[1], f.pts[i * 3 + 2] - ce[2]));
+        near = lat(ce) < radius * 1.3 + ext;
+      }
+      if (!near) { keep.push(f); continue; }
+      const P = (i) => [f.pts[i * 3], f.pts[i * 3 + 1], f.pts[i * 3 + 2]];
+      const Nn = (i) => f.nrm ? [f.nrm[i * 3], f.nrm[i * 3 + 1], f.nrm[i * 3 + 2]] : null;
+      for (let i = 1; i < m - 1; i++) tris.push({ p: [P(0), P(i), P(i + 1)], n: f.nrm ? [Nn(0), Nn(i), Nn(i + 1)] : null, type: f.type, plane: f.plane });
+    }
+    return { keep, tris };
+  });
+  // 2) iterative conforming split of long edges inside the region
+  for (let iter = 0; iter < 7; iter++) {
+    const mark = new Map(); // edge key -> midpoint {p, n}
+    for (const w of work) for (const t of w.tris) for (let e = 0; e < 3; e++) {
+      const a = t.p[e], b = t.p[(e + 1) % 3];
+      const L = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+      // closest point of the edge to the press centre (sampled)
+      let dmin = Infinity;
+      if (L > maxEdge) for (let k = 0; k <= 8; k++) { const t = k / 8; dmin = Math.min(dmin, lat([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t])); }
+      if (L > maxEdge && dmin < radius) {
+        const k = [K(a), K(b)].sort().join('|');
+        if (!mark.has(k)) {
+          let nm = null;
+          if (t.n) { const na = t.n[e], nb = t.n[(e + 1) % 3]; nm = norm([na[0] + nb[0], na[1] + nb[1], na[2] + nb[2]]); }
+          mark.set(k, { p: mid, n: nm });
+        }
+      }
+    }
+    if (!mark.size) break;
+    let total = 0;
+    for (const w of work) {
+      const out = [];
+      for (const t of w.tris) {
+        const M = [0, 1, 2].map(e => mark.get([K(t.p[e]), K(t.p[(e + 1) % 3])].sort().join('|')) || null);
+        const cnt = M.filter(Boolean).length;
+        if (!cnt) { out.push(t); continue; }
+        const V = [t.p[0], t.p[1], t.p[2]], NN = t.n ? [t.n[0], t.n[1], t.n[2]] : null;
+        const mk = (ia, ib, ic) => ({ p: [ia.p, ib.p, ic.p], n: NN ? [ia.n, ib.n, ic.n] : null, type: t.type, plane: t.plane });
+        const v = (i) => ({ p: V[i], n: NN ? NN[i] : null });
+        const m = (e) => ({ p: M[e].p, n: NN ? (M[e].n || NN[e]) : null });
+        if (cnt === 3) {
+          out.push(mk(v(0), m(0), m(2)), mk(m(0), v(1), m(1)), mk(m(2), m(1), v(2)), mk(m(0), m(1), m(2)));
+        } else if (cnt === 2) {
+          // edges k+1 and k+2 are split, edge k is not: corner triangle + quad
+          const k = M.findIndex(x => !x);
+          const a = v(k), b = v((k + 1) % 3), c = v((k + 2) % 3), m1 = m((k + 1) % 3), m2 = m((k + 2) % 3);
+          out.push(mk(m1, c, m2), mk(a, b, m1), mk(a, m1, m2));
+        } else {
+          const e = M.findIndex(Boolean);
+          const a = v(e), b = v((e + 1) % 3), c = v((e + 2) % 3), mm = m(e);
+          out.push(mk(a, mm, c), mk(mm, b, c));
+        }
+      }
+      w.tris = out; total += out.length;
+    }
+    if (total > 40000) break;
+  }
+  // 3) rebuild parts
+  return parts.map((part, i) => {
+    const w = work[i];
+    if (!w.tris.length) return part;
+    const faces = w.keep.slice();
+    for (const t of w.tris) faces.push(new Face([...t.p[0], ...t.p[1], ...t.p[2]], t.n ? [...t.n[0], ...t.n[1], ...t.n[2]] : null, t.type, t.plane));
+    const np = new Part(faces); np.deformed = true;
+    return np;
+  });
 }
 
 // ---------------------------------------------------------------- connectivity

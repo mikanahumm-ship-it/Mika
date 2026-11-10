@@ -7,6 +7,7 @@ import * as THREE from 'three';
 export const TOOLS = [
   { id: 'chef', name: "Chef's Knife", kind: 'knife', len: 1.6, h: 0.42, prof: 'chef', weight: 1, pitch: 1, push: 1 },
   { id: 'dicer', name: 'Dicer', kind: 'dice', len: 2.7, h: 0.55, prof: 'dicer', weight: 1.2, pitch: 0.95, cube: 0.07 },
+  { id: 'squish', name: 'Squish', kind: 'squish', len: 0.4, h: 0.3, prof: 'press', weight: 0.5, pitch: 0.8 },
   { id: 'santoku', name: 'Santoku', kind: 'knife', len: 1.4, h: 0.44, prof: 'santoku', weight: 1, pitch: 1.1, push: 0.9 },
   { id: 'cleaver', name: 'Cleaver', kind: 'knife', len: 1.3, h: 0.75, prof: 'cleaver', weight: 1.8, pitch: 0.8, push: 1.8, knock: 0.8 },
   { id: 'bread', name: 'Bread Knife', kind: 'knife', len: 1.9, h: 0.32, prof: 'bread', weight: 0.9, pitch: 1, push: 0.8, saw: true },
@@ -85,6 +86,16 @@ export function buildToolModel(tool, finishId, handleId, opts) {
     for (const s of [-1, 1]) { const k = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.28, 12), handleMat); k.position.set(s * L / 2, 0.1, 0); g.add(k); }
     g.userData.edge = 0; return g;
   }
+  if (tool.prof === 'press') {
+    // soft silicone press pad (bottom of the pad at the origin) on a short stem
+    const pad = new THREE.Mesh(new THREE.SphereGeometry(0.2, 28, 18), new THREE.MeshPhysicalMaterial({ color: '#f4cbc2', roughness: 0.45, clearcoat: 0.6, sheen: 0.5 }));
+    pad.scale.set(1, 0.55, 1); pad.position.y = 0.11; pad.castShadow = true; g.add(pad);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.065, 0.5, 18), handleMat);
+    stem.position.y = 0.42; stem.castShadow = true; g.add(stem);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 14), handleMat);
+    knob.position.y = 0.7; knob.castShadow = true; g.add(knob);
+    return g;
+  }
   if (tool.prof === 'shaver' || tool.prof === 'gouge') {
     // Peeling blade: the cutting edge sits at the origin; a thin plate rises
     // forward from it at a rake angle (shavings ride up its top face and roll
@@ -139,9 +150,10 @@ export function toolIcon(tool) {
     dicer: 'M2 22 L44 22 L44 15 L41 12 L2 12 Z',
     crinkle: 'M8 22 L12 20 L16 22 L20 20 L24 22 L28 20 L32 22 L36 20 L36 12 L8 12 Z', laser: 'M4 21 L42 21 L42 18 L4 18 Z',
   }[tool.prof];
-  const handle = tool.kind === 'knife' && tool.prof !== 'wire';
+  const handle = (tool.kind === 'knife' || tool.kind === 'dice') && tool.prof !== 'wire';
   let body = '';
-  if (tool.prof === 'wire') body = '<path d="M6 22 Q24 2 42 22" fill="none" stroke="currentColor" stroke-width="2.4"/><line x1="6" y1="22" x2="42" y2="22" stroke="currentColor" stroke-width="1"/>';
+  if (tool.prof === 'press') body = '<ellipse cx="22" cy="21" rx="10" ry="4.5" fill="currentColor" opacity=".85"/><rect x="19.5" y="5" width="5" height="13" rx="2.5" fill="currentColor" opacity=".55"/><circle cx="22" cy="5" r="3.5" fill="currentColor" opacity=".55"/>';
+  else if (tool.prof === 'wire') body = '<path d="M6 22 Q24 2 42 22" fill="none" stroke="currentColor" stroke-width="2.4"/><line x1="6" y1="22" x2="42" y2="22" stroke="currentColor" stroke-width="1"/>';
   else if (tool.prof === 'shaver') body = '<rect x="24" y="19" width="16" height="4" rx="1.5" fill="currentColor"/><line x1="26" y1="19" x2="12" y2="8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
   else if (tool.prof === 'gouge') body = '<path d="M26 20 Q32 26 38 20" fill="none" stroke="currentColor" stroke-width="3"/><line x1="28" y1="18" x2="12" y2="8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
   else body = `<path d="${P}" fill="currentColor" opacity=".85"/>`;

@@ -161,6 +161,11 @@ export function makeMaterial(surf, matProps, shared, opts = {}) {
     uWobT: shared.time,         // global time
     uWobBase: shared.base,      // per-cluster base y
     uWobH: shared.height,
+    uPress: shared.press || { value: new THREE.Vector4(0, 0, 0, 1) },
+    uPressH: shared.pressH || { value: 0 },
+    uPressU: shared.pressU || { value: new THREE.Vector3(0, 1, 0) },
+    uPressBase: shared.pressBase || { value: 0 },
+    uPressBulge: shared.pressBulge || { value: 0.6 },
   };
   if (opts.double) m.shadowSide = THREE.FrontSide; // thin double-sided strips: avoid self-shadow acne
   m.userData.u = u;
@@ -172,9 +177,31 @@ export function makeMaterial(surf, matProps, shared, opts = {}) {
       .replace('#include <common>', `#include <common>
         varying vec3 vMPos; varying vec3 vMNrm;
         ${opts.mpos ? 'attribute vec3 mpos;' : ''}
-        uniform float uWobA; uniform float uWobT; uniform float uWobBase; uniform float uWobH;`)
+        uniform float uWobA; uniform float uWobT; uniform float uWobBase; uniform float uWobH;
+        uniform vec4 uPress; uniform float uPressH; uniform vec3 uPressU; uniform float uPressBase; uniform float uPressBulge;
+        // Squish: a finger dent with a soft bulge/ridge around it. Mirrors pressD() in squish.js.
+        vec3 pressD(vec3 p) {
+          vec3 u = uPressU, c = uPress.xyz; float R = uPress.w;
+          float hp = dot(p, u) - uPressBase, hc = max(dot(c, u) - uPressBase, 0.02);
+          vec3 q = (p - c) - dot(p - c, u) * u; float r = length(q), x = r / R;
+          float f = clamp(hp / hc, 0., 1.);
+          float w = exp(-x * x * 1.6);
+          vec3 dir = r > 1e-5 ? q / r : vec3(0.);
+          float bul = uPressH * uPressBulge * x * exp(-x * x * 0.9) * f * (1. - 0.5 * f);
+          float ridge = uPressH * uPressBulge * 0.45 * exp(-pow((x - 1.35) * 2.2, 2.)) * f;
+          return dir * bul + u * (-uPressH * w * f + ridge);
+        }`)
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        if (uPressH > 0.0005) {
+          const float e = 0.01;
+          vec3 gx = (pressD(position + vec3(e,0.,0.)) - pressD(position - vec3(e,0.,0.))) / (2. * e);
+          vec3 gy = (pressD(position + vec3(0.,e,0.)) - pressD(position - vec3(0.,e,0.))) / (2. * e);
+          vec3 gz = (pressD(position + vec3(0.,0.,e)) - pressD(position - vec3(0.,0.,e))) / (2. * e);
+          objectNormal = normalize(objectNormal - vec3(dot(gx, objectNormal), dot(gy, objectNormal), dot(gz, objectNormal)));
+        }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vMPos = ${opts.mpos ? 'mpos' : 'position'}; vMNrm = normal;
+        if (uPressH > 0.0005) transformed += pressD(position);
         if (uWobA > 0.0001) {
           float hh = clamp((position.y - uWobBase) / max(uWobH, .01), 0., 1.);
           float w = sin(uWobT*21.) * uWobA * hh;

@@ -142,5 +142,13 @@ export class Audio {
     const n = Math.min(6, 1 + Math.floor(cubes / 25));
     for (let i = 0; i < n; i++) this.grain(prof, 0.7, t + i * 0.008 + Math.random() * 0.01, { pitch: 1.1 });
   }
+  // something brittle gives way under the finger
+  crack(prof) {
+    if (!this.ok) return;
+    const t = this.ctx.currentTime;
+    this.thump(t, 95, 0.4);
+    for (let i = 0; i < 9; i++) this.grain(prof === 'soap' ? 'soap' : 'choc', 1, t + i * 0.006 + Math.random() * 0.02, { pitch: 0.9 + Math.random() * 0.4 });
+    for (let i = 0; i < 5; i++) this.grain('crunch', 0.8, t + 0.03 + i * 0.03 + Math.random() * 0.02, { pitch: 1 });
+  }
   ui() { if (this.ok) this.tone(this.ctx.currentTime, 1400, 0.025, 0.05); }
 }

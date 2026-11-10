@@ -32,8 +32,8 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 
 ## Content
 
-- **131 objects** in 12 categories: meat & fish, sushi, bakery, cakes, cheese, fruit, vegetables, sweets & jelly, soap, soft & sand, wax & candles, and other satisfying objects.
-- **15 tools**: Chef's knife, Dicer (sweeps objects into thousands of cubes), santoku, cleaver, bread knife (serrated sawing sound), precision blade, soap cutter, wire cutter, soap shaver, carving gouge. Five more unlock as you cut: crinkle cutter, wave blade, melon scoop, obsidian blade and light blade.
+- **161 objects** in 13 categories: viral & squishy (pistachio kunafa chocolate, tanghulu, mille crêpe, geode, stress ball, slime, play dough, water-bead jelly …), meat & fish, sushi, bakery, cakes, cheese, fruit, vegetables, sweets & jelly, soap, soft & sand, wax & candles, and other satisfying objects.
+- **16 tools**: Chef's knife, Dicer (sweeps objects into thousands of cubes), Squish (press and hold to deform), santoku, cleaver, bread knife (serrated sawing sound), precision blade, soap cutter, wire cutter, soap shaver, carving gouge. Five more unlock as you cut: crinkle cutter, wave blade, melon scoop, obsidian blade and light blade.
 - **Customisation**: 6 blade finishes (Damascus, gold and obsidian unlock) and 6 handle colours.
 
 ## How the cutting works
@@ -56,6 +56,18 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
   - Each cube is coloured by a CPU port of the volumetric shader at that exact point, so fat, layers, rind and seeds land on the right cubes.
   - Cubes fall, bounce and tumble. On landing, each one finds its resting cell downhill on a height field (angle of repose), reserves it and hops there, so piles build up without overlaps.
   - Tens of thousands of cubes run cheaply as one instanced mesh. The *Cube size* slider sets their size, and the counter shows how many you've made.
+- **Squish** (`src/squish.js`). Press and hold to push a dent into the object. Dragging your finger leaves a groove.
+  - While pressing, the dent is a vertex-shader deformation, with a soft bulge and a raised rim around it.
+  - The mesh is first subdivided around your finger (crack-free refinement) so it can bend smoothly.
+  - What happens on release depends on the material:
+
+    | Type | Examples | On release |
+    |---|---|---|
+    | Plastic | clay, kinetic sand, dough, cake, meat | The dent is baked into the real geometry. You can press again, drag a groove, or cut through it, and the cut face follows the dent. |
+    | Elastic | jelly, stress ball, sponge, honey jelly | The dent springs back with a wobble. |
+    | Brittle | chocolate, ice, soap, crunchy food | The object gives a little, then cracks into real pieces along planes through your finger. |
+
+  - Cutting a dented object traces the real (non-convex) cross-section instead of a convex hull.
 - **Guides**: Lengthwise and Across lock the blade to a straight line along or across the piece's long axis. On release the cut is completed in both directions through the whole piece.
 - **Volumetric materials** (`src/materials.js`). Colour comes from the 3D position inside the object (marbling, layers, fruit flesh and seeds, citrus segments, crumb, sand grain …), so every new surface shows the matching inside.
 - **Physics** (`vendor/rapier.es.js`). Pieces and curls are Rapier rigid bodies with convex-hull colliders.
@@ -81,9 +93,10 @@ src/game.js                scene, physics bridge, input, camera, undo, follow-vi
 src/live.js                live cutting engine: blade path, slots, peeling, curls, material behaviour
 src/dice.js                dicer cubes: voxelisation + lightweight pile simulation
 src/patterns.js            CPU port of the volumetric material patterns (cube colours)
+src/squish.js              squish tool: press deformation, baking, spring-back, cracking
 src/geometry.js            convex part kernel: split, caps, connectivity, shape generators
 src/materials.js           procedural volumetric shaders (15 patterns)
-src/catalog.js             131 object definitions (data only — add objects here)
+src/catalog.js             161 object definitions (data only — add objects here)
 src/tools.js               tool definitions, 3D knife models, icons
 src/audio.js               procedural ASMR sound engine
 src/particles.js           instanced shavings / crumbs / juice / sand / ice
