@@ -6,6 +6,7 @@ import * as THREE from 'three';
 // path:  stroke modifier applied to the real path you drew (zigzag/wave)
 export const TOOLS = [
   { id: 'chef', name: "Chef's Knife", kind: 'knife', len: 1.6, h: 0.42, prof: 'chef', weight: 1, pitch: 1, push: 1 },
+  { id: 'dicer', name: 'Dicer', kind: 'dice', len: 2.7, h: 0.55, prof: 'dicer', weight: 1.2, pitch: 0.95, cube: 0.07 },
   { id: 'santoku', name: 'Santoku', kind: 'knife', len: 1.4, h: 0.44, prof: 'santoku', weight: 1, pitch: 1.1, push: 0.9 },
   { id: 'cleaver', name: 'Cleaver', kind: 'knife', len: 1.3, h: 0.75, prof: 'cleaver', weight: 1.8, pitch: 0.8, push: 1.8, knock: 0.8 },
   { id: 'bread', name: 'Bread Knife', kind: 'knife', len: 1.9, h: 0.32, prof: 'bread', weight: 0.9, pitch: 1, push: 0.8, saw: true },
@@ -49,6 +50,7 @@ function profile(t, L, H) {
     case 'soap': P.push([0, 0], [L, 0], [L, H], [0, H]); break;
     case 'crinkle': { P.push([0, 0]); const n = 9; for (let i = 1; i <= n; i++) P.push([(i - 0.5) / n * L, 0.05], [i / n * L, 0]); P.push([L, H], [0, H]); break; }
     case 'laser': P.push([0, 0], [L, 0], [L, H], [0, H]); break;
+    case 'dicer': P.push([0, 0], [L, 0], [L, H * 0.75], [L * 0.94, H], [0, H]); break;
     default: P.push([0, 0], [L, 0], [L, H], [0, H]);
   }
   return P;
@@ -134,6 +136,7 @@ export function toolIcon(tool) {
   const P = {
     chef: 'M4 22 L40 22 Q36 12 6 14 Z', santoku: 'M4 22 L38 22 Q40 14 34 12 L6 13 Z', cleaver: 'M8 22 L36 22 L36 8 L8 8 Z',
     bread: 'M2 22 L42 22 L40 16 L4 16 Z', scalpel: 'M16 22 L34 22 L40 18 L28 16 L16 17 Z', soap: 'M10 22 L36 22 L36 10 L10 10 Z',
+    dicer: 'M2 22 L44 22 L44 15 L41 12 L2 12 Z',
     crinkle: 'M8 22 L12 20 L16 22 L20 20 L24 22 L28 20 L32 22 L36 20 L36 12 L8 12 Z', laser: 'M4 21 L42 21 L42 18 L4 18 Z',
   }[tool.prof];
   const handle = tool.kind === 'knife' && tool.prof !== 'wire';

@@ -134,5 +134,13 @@ export class Audio {
     const t = this.ctx.currentTime;
     this.thump(t, 180 + Math.random() * 80, amp);
   }
+  // dicing: knife tapping the board + a crisp burst whose size follows the cube count
+  chop(prof, cubes) {
+    if (!this.ok) return;
+    const t = this.ctx.currentTime;
+    this.thump(t, 150 + Math.random() * 30, 0.12);
+    const n = Math.min(6, 1 + Math.floor(cubes / 25));
+    for (let i = 0; i < n; i++) this.grain(prof, 0.7, t + i * 0.008 + Math.random() * 0.01, { pitch: 1.1 });
+  }
   ui() { if (this.ok) this.tone(this.ctx.currentTime, 1400, 0.025, 0.05); }
 }

@@ -37,7 +37,7 @@ const add = (cat, id, name, shape, out, inn, opt = {}) => L.push({ cat, id, name
 
 // ======================= MEAT & FISH =======================
 const sear = (a = '#6e3a22', b = '#93502c', d = '#4a2616') => S(PAT.speckle, [a, b, d], 3.2, [0.8, 0.45]);
-add('meat', 'steak', 'Ribeye Steak', box(1.25, 0.32, 0.85, 0.16), sear(), S(PAT.meat, ['#b0303a', '#c94a4f', '#f1d9cf'], 2.6, [0.06, 0.9]), { snd: 'meat', fx: 'juice', mat: { rough: 0.45, clearcoat: 0.3 }, star: true });
+add('meat', 'steak', 'Ribeye Steak', box(1.25, 0.32, 0.85, 0.16), sear(), S(PAT.meat, ['#b81d2c', '#d0313d', '#f4e3da'], 2.6, [0.032, 0.35]), { snd: 'meat', fx: 'juice', mat: { rough: 0.45, clearcoat: 0.3 }, star: true });
 add('meat', 'wagyu', 'A5 Wagyu Block', box(0.95, 0.38, 0.75, 0.08), S(PAT.meat, ['#d1495b', '#e17582', '#fbeee6'], 4.2, [0.12, 1]), S(PAT.meat, ['#c63d50', '#d9667a', '#fff2ea'], 4.6, [0.14, 1]), { snd: 'meat', fx: 'juice', mat: { rough: 0.4, clearcoat: 0.4 } });
 add('meat', 'filet', 'Filet Mignon', cyl(0.75, 0.38, 0.12), sear('#5c311f', '#7c4329'), S(PAT.meat, ['#b9363f', '#d65a5e', '#e9c9bd'], 2, [0.03, 0.2]), { snd: 'meat', fx: 'juice', mat: { rough: 0.45, clearcoat: 0.3 } });
 add('meat', 'roastbeef', 'Roast Beef', box(1.3, 0.45, 0.7, 0.3), sear('#4f2a1a', '#6e3b25'), S(PAT.radial, ['#7a4430', '#c7505a', '#d7656c', '#d7656c'], 0, [0.92, 0.82, 0, 0.7], { axis: [1, 0, 0], center: [0, 0.45, 0] }), { snd: 'meat', fx: 'juice', mat: { rough: 0.5 } });

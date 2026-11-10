@@ -33,7 +33,7 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 ## Content
 
 - **131 objects** in 12 categories: meat & fish, sushi, bakery, cakes, cheese, fruit, vegetables, sweets & jelly, soap, soft & sand, wax & candles, and other satisfying objects.
-- **14 tools**: Chef's knife, santoku, cleaver, bread knife (serrated sawing sound), precision blade, soap cutter, wire cutter, soap shaver, carving gouge. Five more unlock as you cut: crinkle cutter, wave blade, melon scoop, obsidian blade and light blade.
+- **15 tools**: Chef's knife, Dicer (sweeps objects into thousands of cubes), santoku, cleaver, bread knife (serrated sawing sound), precision blade, soap cutter, wire cutter, soap shaver, carving gouge. Five more unlock as you cut: crinkle cutter, wave blade, melon scoop, obsidian blade and light blade.
 - **Customisation**: 6 blade finishes (Damascus, gold and obsidian unlock) and 6 handle colours.
 
 ## How the cutting works
@@ -51,6 +51,11 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 - **Clean geometry.**
   - **Convex-part kernel** (`src/geometry.js`). Every object is a set of convex polyhedra. Splitting a convex part with a plane is exact, and non-convex results like slots and grooves are kept as convex parts glued together by internal faces.
   - **Rebuilt every frame.** While you cut, each touched body is rebuilt from its shape at the start of the stroke plus the blade's path simplified into straight lines (RDP). A long stroke stays a handful of parts, with no seams or slow-down. Each straight line is split only by depth, so all its sections share the same side planes and their internal faces line up exactly.
+- **Dicer** (`src/dice.js`, `src/patterns.js`). A long blade sweeps across the object, and everything it passes is voxelised into real cubes.
+  - A cube is created at every grid cell, in the object's own frame, whose centre lies inside the removed volume.
+  - Each cube is coloured by a CPU port of the volumetric shader at that exact point, so fat, layers, rind and seeds land on the right cubes.
+  - Cubes fall, bounce and tumble. On landing, each one finds its resting cell downhill on a height field (angle of repose), reserves it and hops there, so piles build up without overlaps.
+  - Tens of thousands of cubes run cheaply as one instanced mesh. The *Cube size* slider sets their size, and the counter shows how many you've made.
 - **Guides**: Lengthwise and Across lock the blade to a straight line along or across the piece's long axis. On release the cut is completed in both directions through the whole piece.
 - **Volumetric materials** (`src/materials.js`). Colour comes from the 3D position inside the object (marbling, layers, fruit flesh and seeds, citrus segments, crumb, sand grain …), so every new surface shows the matching inside.
 - **Physics** (`vendor/rapier.es.js`). Pieces and curls are Rapier rigid bodies with convex-hull colliders.
@@ -74,6 +79,8 @@ index.html, style.css      UI shell (minimal glass interface, bottom sheets)
 src/main.js                UI controller, menus, 3D thumbnails, settings
 src/game.js                scene, physics bridge, input, camera, undo, follow-view cuts
 src/live.js                live cutting engine: blade path, slots, peeling, curls, material behaviour
+src/dice.js                dicer cubes: voxelisation + lightweight pile simulation
+src/patterns.js            CPU port of the volumetric material patterns (cube colours)
 src/geometry.js            convex part kernel: split, caps, connectivity, shape generators
 src/materials.js           procedural volumetric shaders (15 patterns)
 src/catalog.js             131 object definitions (data only — add objects here)

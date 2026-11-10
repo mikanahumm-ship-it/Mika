@@ -32,6 +32,7 @@
 
   <div id="hint" class="glass">Drag across the object to cut<br><small>Two fingers rotate &amp; zoom · tap jelly to poke</small></div>
   <div id="toast" class="glass"></div>
+  <div id="cubes" class="glass" hidden><b id="cubeN">0</b><span>cubes</span></div>
 
   <footer class="bottom">
     <div class="modebar glass">
@@ -42,7 +43,7 @@
       <button data-guide="long" class="seg" aria-label="Lengthwise cut"><svg viewBox="0 0 20 12" width="18" height="11"><rect x="1" y="1" width="18" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="1" y1="6" x2="19" y2="6" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.5"/></svg> Lengthwise</button>
       <button data-guide="cross" class="seg" aria-label="Cut across"><svg viewBox="0 0 20 12" width="18" height="11"><rect x="1" y="1" width="18" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="10" y1="1" x2="10" y2="11" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.5"/></svg> Across</button>
       <div class="slider" id="tiltWrap"><span>Tilt</span><input id="tilt" type="range" min="-50" max="50" value="0" step="1"><b id="tiltVal">0°</b></div>
-      <div class="slider hidden" id="sizeWrap"><span>Width</span><input id="size" type="range" min="40" max="220" value="100" step="5"><b id="sizeVal">1×</b></div>
+      <div class="slider hidden" id="sizeWrap"><span id="sizeLbl">Width</span><input id="size" type="range" min="40" max="220" value="100" step="5"><b id="sizeVal">1×</b></div>
       <div class="slider hidden" id="thickWrap"><span>Thickness</span><input id="thick" type="range" min="30" max="300" value="100" step="10"><b id="thickVal">1×</b></div>
     </div>
     <div class="toolbar" id="toolbar"></div>

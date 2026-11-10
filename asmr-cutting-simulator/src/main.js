@@ -19,6 +19,11 @@ const ui = {
     for (const f of FINISHES) if (f.unlock === n) toast(`Unlocked: ${f.name} finish`);
     if (TOOLS.some(t => t.unlock === n)) renderToolbar();
   },
+  onCubes(n) {
+    const el = $('#cubes'); el.hidden = n === 0;
+    $('#cubeN').textContent = n.toLocaleString();
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  },
   hideHint() { $('#hint').classList.add('gone'); },
   buzz(ms) {
     if (!game.settings.haptics) return;
@@ -56,7 +61,8 @@ function selectTool(id) {
   game.setTool(id); game.audio.ui(); renderToolbar(); renderToolSheet();
   const t = game.tool;
   $('#sizeWrap').classList.toggle('hidden', t.kind === 'knife');
-  $('#thickWrap').classList.toggle('hidden', t.kind === 'knife');
+  $('#thickWrap').classList.toggle('hidden', t.kind === 'knife' || t.kind === 'dice');
+  $('#sizeLbl').textContent = t.kind === 'dice' ? 'Cube size' : 'Width';
   $('#tiltWrap').classList.toggle('hidden', t.kind !== 'knife' || game.mode !== 'vertical');
   $$('[data-mode]').forEach(b => b.classList.toggle('hidden', t.kind !== 'knife'));
 }
@@ -67,7 +73,7 @@ function renderToolSheet() {
     const ok = unlocked(t);
     const c = document.createElement('button');
     c.className = 'tcard' + (t.id === game.toolId ? ' on' : '') + (ok ? '' : ' locked');
-    const kind = { knife: 'Slice', shave: 'Shave', carve: 'Carve' }[t.kind] + (t.path ? ` · ${t.path}` : '');
+    const kind = { knife: 'Slice', shave: 'Shave', carve: 'Carve', dice: 'Dice into cubes' }[t.kind] + (t.path ? ` · ${t.path}` : '');
     c.innerHTML = toolIcon(t) + `<span>${t.name}</span><small>${ok ? kind : `🔒 ${t.unlock} cuts`}</small>`;
     c.onclick = () => { if (ok) selectTool(t.id); else toast(`Make ${t.unlock - game.stats.cuts} more cuts to unlock`); };
     g.appendChild(c);

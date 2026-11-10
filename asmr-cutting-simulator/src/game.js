@@ -7,6 +7,7 @@ import { TOOLS, buildToolModel } from './tools.js';
 import { Audio } from './audio.js';
 import { Particles } from './particles.js';
 import { installLive } from './live.js';
+import { Dice } from './dice.js';
 
 const GRAVITY = 55;          // world units are ~10 cm; slightly dreamy gravity
 const BOARD = { hx: 3.6, hz: 2.4, h: 0.28 };
@@ -195,6 +196,7 @@ export class Game {
 
     this.buildBoard();
     this.particles = new Particles(scene);
+    this.dice = new Dice(scene, BOARD);
 
     // stroke trail ribbon
     this.trail = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, depthWrite: false, depthTest: false }));
@@ -269,7 +271,7 @@ export class Game {
     b.mesh.geometry.dispose(); for (const m of b.mesh.material) m.dispose();
     this.bodies.splice(this.bodies.indexOf(b), 1);
   }
-  clearAll() { while (this.bodies.length) this.removeBody(this.bodies[0]); while (this.curls.length) this.removeCurl(this.curls[0]); this.particles.clear(); }
+  clearAll() { while (this.bodies.length) this.removeBody(this.bodies[0]); while (this.curls.length) this.removeCurl(this.curls[0]); this.particles.clear(); if (this.dice) this.dice.clear(); }
 
   spawn(id, drop = true) {
     const def = byId[id] || OBJECTS[0];
@@ -294,6 +296,7 @@ export class Game {
   undo() {
     const s = this.undoStack.pop(); if (!s) return;
     if (s.curls !== undefined) while (this.curls.length > s.curls) this.removeCurl(this.curls[this.curls.length - 1]);
+    if (s.dice !== undefined) this.dice.truncate(s.dice);
     while (this.bodies.length) this.removeBody(this.bodies[0]);
     for (const e of s) this.addBody(e.def, e.parts, e.p, e.q);
     this.audio.ui(); this.ui.onUndo(this.undoStack.length);
@@ -835,6 +838,7 @@ export class Game {
     }
     if (this.knifeLift === 0) { target.y += 0.9; this.knifeFade = (this.knifeFade || 0) + dt * 3; if (this.knifeFade > 1) { k.visible = false; this.knifeFade = 0; return; } } else this.knifeFade = 0;
     k.position.lerp(target, 1 - Math.pow(0.0005, dt));
+    if (tool.kind === 'dice' && this.knifeLift === 0) return; // lift straight up, keep the blade's orientation
     const up = this.mode === 'view' ? this.camera.getWorldDirection(new THREE.Vector3()).negate() : new THREE.Vector3(0, 1, 0).applyAxisAngle(dir, THREE.MathUtils.degToRad(-this.tilt));
     const z = new THREE.Vector3().crossVectors(dir, up).normalize();
     const y = new THREE.Vector3().crossVectors(z, dir).normalize();
@@ -879,6 +883,8 @@ export class Game {
       if (b.wobV > 0.0005) { b.wobV *= Math.pow(0.12, dt); b.uni.wob.value = b.wobV * 0.08; } else b.uni.wob.value = 0;
     }
     this.particles.update(dt);
+    this.dice.update(dt);
+    if (this.dice.count !== this._shownDice) { this._shownDice = this.dice.count; this.ui.onCubes && this.ui.onCubes(this.dice.count); }
     for (const c of this.curls) if (c.h) { this.physics.read(c.h, c.mesh.position, c.mesh.quaternion); }
     // continuous scraping sound while blade moves through material
     if (this.stroke && this.settings.sound) {

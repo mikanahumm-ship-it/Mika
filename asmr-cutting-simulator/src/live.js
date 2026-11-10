@@ -175,12 +175,18 @@ export function installLive(Game, helpers) {
     const f = s.pts[s.pts.length - 1];
     let F = this.projectH(f.x, f.y, s.h);
     if (!F) return null;
-    if (this.guide !== 'free') {
+    if (this.guide !== 'free' && this.tool.kind !== 'dice') {
       if (!s.guide && F.distanceTo(s.last) > 0.08) s.guide = this.guideLine(s, F);
       if (s.guide) { const g = s.guide; F = g.o.clone().addScaledVector(g.d, F.clone().sub(g.o).dot(g.d)); F.y = s.h; }
       else return s.K.clone();
     }
     const tool = this.tool;
+    if (tool.kind === 'dice') {
+      if (!s.guide && F.distanceTo(s.last) > 0.06) { const d = F.clone().sub(s.last).setY(0).normalize(); s.guide = { o: s.last.clone(), d }; }
+      if (!s.guide) return s.K.clone();
+      const g = s.guide; F = g.o.clone().addScaledVector(g.d, Math.max(0, F.clone().sub(g.o).dot(g.d))); F.y = s.h;
+      return F;
+    }
     if (tool.path && s.dir) {
       const side = new THREE.Vector3(-s.dir.z, 0, s.dir.x);
       const along = s.fingerS + F.distanceTo(s.K);
@@ -252,14 +258,15 @@ export function installLive(Game, helpers) {
 
   // One step of real material removal between A and B.
   P.liveSegment = function (s, A, B, t, tool, anchor = A) {
-    const isKnife = tool.kind === 'knife';
+    const isDice = tool.kind === 'dice';
+    const isKnife = tool.kind === 'knife' || isDice;
     const ui = this.ui;
-    const width = isKnife ? (tool.kerf || 0.034) : tool.width * (ui.widthScale || 1);
+    const width = isDice ? 8 : isKnife ? (tool.kerf || 0.034) : tool.width * (ui.widthScale || 1);
     const depth = isKnife ? Infinity : tool.depth * (ui.depthScale || 1);
     const tiltR = isKnife ? THREE.MathUtils.degToRad(this.tilt) : 0;
     const dn = new THREE.Vector3(0, -1, 0).applyAxisAngle(t, tiltR);
     const n = new THREE.Vector3().crossVectors(t, dn).normalize();
-    const ov = isKnife ? width + 0.012 : Math.min(width * 0.35, 0.05);
+    const ov = isKnife ? Math.min(width, 0.05) + 0.012 : Math.min(width * 0.35, 0.05);
     const planes = [
       { n: n.toArray(), c: n.dot(anchor) - width / 2 },
       { n: n.clone().negate().toArray(), c: -n.dot(anchor) - width / 2 },
@@ -297,7 +304,10 @@ export function installLive(Game, helpers) {
     const beh = behavior(body0.def);
     // knife: the slot is as deep as the blade tip has pressed in
     let floorY;
-    if (isKnife) {
+    if (isDice) {
+      floorY = -1;
+      s.segs.push({ A: A.clone(), B: B.clone(), t: t.clone(), anchor: anchor.clone(), partial: false, floorY, tilt: 0, width });
+    } else if (isKnife) {
       s.tip = Math.min(s.tip, top);
       s.tip = Math.max(-0.01, s.tip - STEP * beh.sink);
       floorY = s.tip <= 0.002 ? -1 : s.tip;
@@ -323,12 +333,21 @@ export function installLive(Game, helpers) {
     }
     if (!removed.length) return;
     s.changed = true;
-    if (!s.pushedUndo) { this.undoStack.push(s.snap); s.snap.curls = this.curls.length; if (this.undoStack.length > 30) this.undoStack.shift(); this.ui.onUndo(this.undoStack.length); s.pushedUndo = true; }
+    if (!s.pushedUndo) { this.undoStack.push(s.snap); s.snap.curls = this.curls.length; s.snap.dice = this.dice.count; if (this.undoStack.length > 30) this.undoStack.shift(); this.ui.onUndo(this.undoStack.length); s.pushedUndo = true; }
     // material reaction while cutting
     if (beh.react) body0.wobV = Math.max(body0.wobV, beh.react);
     const vol = removed.reduce((a, r) => a + r.part.massProps().V, 0);
     s.removedRate = (s.removedRate || 0) * 0.7 + vol * 0.3;
-    if (isKnife) this.knifeSpray(s, B, top, body0, vol);
+    if (isDice) {
+      // everything the blade passed becomes real cubes
+      const size = (tool.cube || 0.07) * (ui.widthScale || 1);
+      const back = t.clone().negate();
+      let made = 0;
+      for (const r of removed) made += this.dice.addFromPart(r.b, r.part, size, back, r.b.def);
+      s.diced = (s.diced || 0) + made;
+      s.chop = (s.chop || 0) + STEP;
+      if (s.chop > 0.09) { s.chop = 0; this.audio.chop(body0.def.snd, made); }
+    } else if (isKnife) this.knifeSpray(s, B, top, body0, vol);
     else this.peelMaterial(s, A, B, t, n, top, floorY, removed, beh);
   };
 
@@ -439,11 +458,12 @@ export function installLive(Game, helpers) {
       b.dirtyLive = false; b.wbox = null;
       let clean = null;
       if (s.orig.has(b)) {
-        const res = this.rebakeBody(s, b, tool.kind === 'knife', true);
+        const res = this.rebakeBody(s, b, tool.kind === 'knife' || tool.kind === 'dice', true);
         if (res) { clean = res.parts; if (s.chunk && s.chunk.src === b) { s.chunk.parts = res.removed; s.chunk.dirty = true; } }
       }
       const parts = (clean || b.parts).filter(p => p.massProps().V > 2e-6);
-      let comps = tool.kind === 'knife' ? components(parts) : [parts];
+      if (!parts.length) { this.removeBody(b); continue; } // fully diced / removed
+      let comps = tool.kind === 'knife' || tool.kind === 'dice' ? components(parts) : [parts];
       if (comps.length > 1) {
         const t = s.dir || new THREE.Vector3(1, 0, 0);
         const n = new THREE.Vector3(-t.z, 0, t.x);
@@ -474,7 +494,17 @@ export function installLive(Game, helpers) {
     const t = s.dir || this.knifeDir || new THREE.Vector3(1, 0, 0);
     this.knifeDir = t.clone();
     const front = s.last.clone();
-    if (tool.kind === 'knife') {
+    if (tool.kind === 'dice') {
+      const side = new THREE.Vector3(-t.z, 0, t.x);
+      const z = new THREE.Vector3().crossVectors(side, UP).normalize();
+      k.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(side, UP, z));
+      k.scale.setScalar(1);
+      const target = front.clone(); target.y = 0.004;
+      target.addScaledVector(side, tool.len * 0.05).addScaledVector(t, -0.02);
+      k.position.lerp(target, 1 - Math.pow(1e-6, dt));
+      this.knifeTarget = target.clone();
+      s.floorVis = 0;
+    } else if (tool.kind === 'knife') {
       const top = s.top ?? s.h;
       const edgeY = s.inMat || s.tip < top - 0.01 ? Math.max(0.003, s.tip) : top + 0.004;
       s.floorVis = edgeY;
@@ -552,7 +582,7 @@ export function installLive(Game, helpers) {
     for (const r of runs) {
       const dn = new THREE.Vector3(0, -1, 0).applyAxisAngle(r.t, THREE.MathUtils.degToRad(r.tilt));
       const n = new THREE.Vector3().crossVectors(r.t, dn).normalize();
-      const ov = isKnife ? r.width + 0.012 : Math.min(r.width * 0.35, 0.05);
+      const ov = isKnife ? Math.min(r.width, 0.05) + 0.012 : Math.min(r.width * 0.35, 0.05);
       const lp = [
         { n: n.toArray(), c: n.dot(r.anchor) - r.width / 2 },
         { n: n.clone().negate().toArray(), c: -n.dot(r.anchor) - r.width / 2 },
