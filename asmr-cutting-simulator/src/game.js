@@ -9,7 +9,6 @@ import { Particles } from './particles.js';
 import { installLive } from './live.js';
 import { Dice } from './dice.js';
 import { installSquish } from './squish.js';
-import { installBowl } from './bowl.js';
 
 const GRAVITY = 55;          // world units are ~10 cm; slightly dreamy gravity
 const BOARD = { hx: 3.6, hz: 2.4, h: 0.28 };
@@ -298,7 +297,7 @@ export class Game {
     b.mesh.geometry.dispose(); for (const m of b.mesh.material) m.dispose();
     this.bodies.splice(this.bodies.indexOf(b), 1);
   }
-  clearAll() { if (this.removeBowl) this.removeBowl(); while (this.bodies.length) this.removeBody(this.bodies[0]); while (this.curls.length) this.removeCurl(this.curls[0]); this.particles.clear(); if (this.dice) this.dice.clear(); }
+  clearAll() { while (this.bodies.length) this.removeBody(this.bodies[0]); while (this.curls.length) this.removeCurl(this.curls[0]); this.particles.clear(); if (this.dice) this.dice.clear(); }
 
   spawn(id, drop = true) {
     const def = byId[id] || OBJECTS[0];
@@ -310,26 +309,11 @@ export class Game {
     if (drop) setTimeout(() => { this.audio.tick(0.22); this.wobbleAll(0.5); }, 170);
     const bb = part.bounds(); const size = Math.max(bb.mx[0] - bb.mn[0], bb.mx[1] - bb.mn[1], bb.mx[2] - bb.mn[2]);
     this.audio.objPitch = THREE.MathUtils.clamp(2.2 / size, 0.8, 1.35);
-    this.placed = [{ id: def.id, x: 0, z: 0, yaw: 0 }];
     this.camGoal.target = new THREE.Vector3(0, 0.35, 0);
     this.ui.onObject(def, 1);
     this.savePrefs();
   }
-  reset() {
-    if (!this.current) return;
-    const placed = this.placed && this.placed.length > 1 ? this.placed.slice() : null;
-    this.spawn(placed ? placed[0].id : this.current.id);
-    if (placed) {
-      // salad: put every object back where it was
-      this.clearAll(); this.placed = [];
-      for (const p of placed) {
-        const def = byId[p.id]; this.placed.push(p);
-        this.addBody(def, [makeShape(def.shape)], new THREE.Vector3(p.x, 0.4, p.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.yaw));
-      }
-      this.ui.onObject(this.current, this.placed.length);
-    }
-    this.audio.ui();
-  }
+  reset() { if (this.current) { this.spawn(this.current.id); this.audio.ui(); } }
 
   snapshot() {
     return this.bodies.map(b => {
@@ -949,7 +933,14 @@ export class Game {
         b.vyPrev = vy;
       }
     }
-    if (this.dice.landedNow) { if (this.settings.sound) this.audio.pitter(this.dice.landedNow, this.dice.prof); this.dice.landedNow = 0; }
+    // cubes hitting the board and each other
+    const imp = this.dice.takeImpacts();
+    if (imp.length && this.settings.sound) this.audio.cubeHits(imp);
+    for (const i of this.dice.takeCrumbled()) {
+      const c = new THREE.Color().fromArray(this.dice.mesh.instanceColor.array, i * 3);
+      const at = new THREE.Vector3(this.dice.p[i * 3], this.dice.p[i * 3 + 1], this.dice.p[i * 3 + 2]);
+      for (let k = 0; k < 5; k++) this.particles.spawn('sand', at, new THREE.Vector3((Math.random() - .5) * 1.4, Math.random() * 0.9, (Math.random() - .5) * 1.4), c, { scale: 1.6 });
+    }
     this.particles.update(dt);
     this.dice.update(dt);
     if (this.dice.count !== this._shownDice) { this._shownDice = this.dice.count; this.ui.onCubes && this.ui.onCubes(this.dice.count); }
@@ -995,5 +986,4 @@ function rdp(P, eps) {
 
 installLive(Game, { buildGeometry, bodyMaterials });
 installSquish(Game, { buildGeometry });
-installBowl(Game, { BOARD });
 export { Part };

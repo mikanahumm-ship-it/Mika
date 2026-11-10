@@ -27,13 +27,11 @@
     <button id="slowBtn" class="icon glass" aria-label="Slow motion"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v4l2.5 2M10 2h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
     <button id="viewBtn" class="icon glass" aria-label="Camera angle"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 8h3l2-3h8l2 3h3v11H3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
     <button id="orbitBtn" class="icon glass" aria-label="Rotate camera with one finger"><svg viewBox="0 0 24 24" width="20" height="20"><ellipse cx="12" cy="12" rx="9" ry="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".5"/><path d="M18 6l3 2-3.5 1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-    <button id="bowlBtn" class="icon glass" aria-label="Salad bowl"><svg viewBox="0 0 24 24" width="21" height="21"><path d="M3 11h18a9 9 0 01-18 0z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 21h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 8c0-2 1-3 3-3M14 8c1-2 3-3 5-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
     <button id="grabBtn" class="icon glass" aria-label="Move pieces"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M8 13V5.5a1.5 1.5 0 013 0V12m0-1V4.5a1.5 1.5 0 013 0V12m0-6.5a1.5 1.5 0 013 0V13m0-4.5a1.5 1.5 0 013 0V15a7 7 0 01-7 7h-1a7 7 0 01-6-3.5L3.5 14a1.6 1.6 0 012.7-1.7L8 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   </aside>
 
   <div id="hint" class="glass">Drag across the object to cut<br><small>Two fingers rotate &amp; zoom · tap jelly to poke</small></div>
   <div id="toast" class="glass"></div>
-  <button id="mixBtn" class="glass" hidden><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 14c3 4 13 4 16 0M7 9c2-3 8-3 10 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 6l2 3-3.5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Mix</button>
   <div id="cubes" class="glass" hidden><b id="cubeN">0</b><span>cubes</span></div>
 
   <footer class="bottom">
@@ -57,7 +55,6 @@
       <div class="sheet-head">
         <h2>Objects</h2>
         <input id="search" type="search" placeholder="Search 177 objects" autocomplete="off">
-        <button id="addMode" class="addmode" aria-pressed="false">＋ Add</button>
         <button class="icon close" data-close aria-label="Close">✕</button>
       </div>
       <div class="cats" id="cats"></div>
@@ -88,7 +85,6 @@
         <p>Every object is real geometry, and it changes shape while you drag. The knife carves a thin slot that follows your finger, and a piece falls away the moment the slot fully crosses it. The peeler removes a strip under the blade, and that strip becomes the curl, peel or chunk you see. Nothing is a canned animation.</p>
         <p>The blade sits in the cut it has made. If you start on top of an object, it presses in as it travels. If you come in from the side, it slides in at board level. Harder materials make the blade lag a little behind your finger.</p>
         <p>Use <b>Tilt</b> for angled cuts, <b>Lengthwise</b> or <b>Across</b> for perfectly straight cuts through the whole piece, and <b>Width</b> and <b>Thickness</b> to size the peeler. <b>Follow view</b> with a low camera cuts horizontally.</p>
-        <p><b>Salad</b>: turn on <b>＋ Add</b> in the objects menu to put several things on the board, cut them up, then tap the bowl button. Everything flies into the bowl, and <b>Mix</b> tosses it.</p>
         <p><b>Squish</b>: press and hold to dent an object. Keep holding and soft things splat: jelly bursts, dough flattens. Clay, sand and dough keep the dent, jelly and stress balls spring back, and chocolate, ice and soap crack into real pieces. <b>Dicer</b>: sweep across an object to turn it into hundreds of cubes in the colours of its inside.</p>
         <p>Each material reacts in its own way. Soap and wax curl, chocolate curls break off, meat drapes, fruit and vegetables peel, jelly and clay come away in wobbly chunks, and sand, bread and cake crumble. Soft materials wobble visually but are solid pieces, not true soft-body simulations.</p>
         <p>Vibration works on Android browsers; iPhone Safari offers limited haptics. On iPhone, turn off silent mode to hear sound.</p>

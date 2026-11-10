@@ -233,6 +233,7 @@ export function installLive(Game, helpers) {
     const steps = this.liveAdvance(s, tool, F, MAX_STEPS);
     if (steps) this.liveCommitVisuals(s, tool);
     this.livePose(s, tool, dt);
+    this.bladePush(s, tool);
     // curl / chunk follow the blade
     if (s.curl) s.curl.layout(this.curlAnchor(s), s.dir || new THREE.Vector3(1, 0, 0), new THREE.Vector3(-(s.dir || UP).z, 0, (s.dir || UP).x).normalize());
     if (s.chunk) this.chunkLayout(s);
@@ -538,6 +539,7 @@ export function installLive(Game, helpers) {
       target.addScaledVector(x, -tipOffset);
       k.position.lerp(target, 1 - Math.pow(1e-6, dt));
       this.knifeTarget = target.clone();
+      if (k.userData.wheel) { k.userData.wheel.rotation.z = -(s.travel || 0) / k.userData.wheelR; }
     } else {
       // peeler: edge rides exactly on the groove floor, plate rising ahead of it
       const floor = s.top !== undefined ? Math.max((s.top ?? s.h) - this.tool.depth * (this.ui.depthScale || 1), 0.012) : s.h;
@@ -613,6 +615,18 @@ export function installLive(Game, helpers) {
     }
     const out = parts.filter(p => p.massProps().V > 2e-6);
     return collect ? { parts: out, removed: removed.filter(p => p.massProps().V > 2e-6) } : out;
+  };
+
+  // The blade physically shoves diced cubes out of its way.
+  P.bladePush = function (s, tool) {
+    if (!this.dice.count || !s.dir) return;
+    const t = s.dir, side = new THREE.Vector3(-t.z, 0, t.x), f = s.last.clone(); f.y = 0;
+    let A, B, dir;
+    if (tool.kind === 'dice') { const L = tool.len * 0.5; A = f.clone().addScaledVector(side, -L); B = f.clone().addScaledVector(side, L); dir = t; }
+    else if (tool.kind === 'knife') { A = f.clone().addScaledVector(t, -tool.len * (this.knifeScale || 1) * 0.9); B = f; dir = t.clone().multiplyScalar(0.35); }
+    else { const w = tool.width * (this.ui.widthScale || 1) * 0.6; A = f.clone().addScaledVector(side, -w); B = f.clone().addScaledVector(side, w); dir = t; }
+    const n = this.dice.pushBlade(A, B, dir, Math.max(0.3, tool.h * (this.knifeScale || 1)), 0.6 + Math.min(1.5, s.speed));
+    if (n && this.settings.sound && Math.random() < 0.5) this.audio.cubeHits([this.dice.prof, 1.5 + s.speed]);
   };
 
   P.liveEnd = function () {

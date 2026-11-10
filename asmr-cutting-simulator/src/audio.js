@@ -189,6 +189,25 @@ export class Audio {
       if (P.wet && Math.random() < 0.3) this.squelch(tt, 0.05, 0);
     }
   }
+  // cubes landing / colliding: list = [prof, speed, prof, speed, ...]
+  cubeHits(list) {
+    if (!this.ok) return;
+    const now = this.ctx.currentTime;
+    if (now - (this._hitT || 0) < 0.012) return;
+    this._hitT = now;
+    const n = Math.min(7, list.length / 2);
+    for (let k = 0; k < n; k++) {
+      const i = Math.floor(Math.random() * (list.length / 2)) * 2, prof = list[i], sp = Math.min(5, list[i + 1]);
+      const t = now + Math.random() * 0.025, a = Math.min(0.16, 0.025 + sp * 0.022);
+      const P = PROFILES[prof] || PROFILES.soft;
+      if (P.glass || P.ice) { this.tone(t, 2600 + Math.random() * 4200, a * 0.6, 0.06 + Math.random() * 0.08); this.noiseBurst(t, 7000, 4000, 2, a * 0.5, 0.02); }
+      else if (P.wet || prof === 'jelly' || prof === 'slime') { this.squelch(t, a * 0.9, P.bloop); this.noiseBurst(t, 900, 500, 1.5, a * 0.5, 0.03, 'bandpass', true); }
+      else if (prof === 'sand') this.noiseBurst(t, 5500, 3000, 0.7, a * 0.7, 0.05);
+      else if (prof === 'soap' || prof === 'wax') { this.noiseBurst(t, 1800 + Math.random() * 600, 1200, 2, a, 0.035); this.thump(t, 260 + Math.random() * 90, a * 0.5); }
+      else if (P.crisp || prof === 'choc') { this.noiseBurst(t, 3200 + Math.random() * 1500, 2000, 2.5, a, 0.02); this.tone(t, 900 + Math.random() * 600, a * 0.25, 0.035); }
+      else { this.noiseBurst(t, 2000 + Math.random() * 1600, 1300, 2.2, a, 0.03); this.thump(t, 200 + Math.random() * 120, a * 0.6); }
+    }
+  }
   // continuous wet/crumbly squish while pressing
   squishStart(prof) {
     if (!this.ok) return;
