@@ -32,8 +32,8 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 
 ## Content
 
-- **177 objects** in 14 categories: glass & ice (glass blocks, stained glass, marbles, tempered pane, ice cubes, glacier ice, frozen-flower ice …), viral & squishy (pistachio kunafa chocolate, tanghulu, mille crêpe, geode, stress ball, slime, play dough, water-bead jelly …), meat & fish, sushi, bakery, cakes, cheese, fruit, vegetables, sweets & jelly, soap, soft & sand, wax & candles, and other satisfying objects.
-- **16 tools**: Chef's knife, Dicer (sweeps objects into thousands of cubes), Squish (press and hold to deform), santoku, cleaver, bread knife (serrated sawing sound), precision blade, soap cutter, wire cutter, soap shaver, carving gouge. Five more unlock as you cut: crinkle cutter, wave blade, melon scoop, obsidian blade and light blade.
+- **206 objects** in 15 categories: carving (woods, bowl blank, carving soap and wax …), glass & ice (glass blocks, stained glass, marbles, tempered pane, ice cubes, glacier ice, frozen-flower ice …), viral & squishy (pistachio kunafa chocolate, tanghulu, mille crêpe, geode, stress ball, slime, play dough, water-bead jelly …), meat & fish, sushi, bakery, cakes, cheese, fruit, vegetables, sweets & jelly, soap, soft & sand, wax & candles, and other satisfying objects.
+- **Cutting tools**: Chef's knife; Dicer, Fine Dicer and Chunk Dicer (sweep objects into scattering cubes); nakiri, sashimi knife, paring knife, butcher knife, fillet knife, ceramic knife, mezzaluna, pizza wheel (it rolls) and ulu; Squish (press and hold to deform), santoku, cleaver, bread knife (serrated sawing sound), precision blade, soap cutter, wire cutter, soap shaver, carving gouge. Five more unlock as you cut: crinkle cutter, wave blade, melon scoop, obsidian blade and light blade.
 - **Customisation**: 6 blade finishes (Damascus, gold and obsidian unlock) and 6 handle colours.
 
 ## How the cutting works
@@ -69,10 +69,34 @@ You can also host it on GitHub Pages or any static host. All dependencies are ve
 
   - Cutting a dented object traces the real (non-convex) cross-section instead of a convex hull.
 - **Splat**: keep holding a squish past full depth and soft things give way. Jelly, slime and fruit burst into real chunks that fly out to the sides. Dough, clay, sand and cake flatten into a pancake (an affine squash, so the geometry stays valid) and squirt blobs coloured from the inside.
-- **Salad mode** (`src/bowl.js`).
-  - *＋ Add* in the object menu puts more objects on the board.
-  - The bowl button brings a bowl beside the board. Every cut piece, curl and diced cube flies into it in a real ballistic arc, with physics walls and the cube pile fitted to the bowl's shape.
-  - **Mix** tosses the contents up and swirls them.
+- **Carving mode** (the *Carve* tab, `src/live.js` + `src/tools.js`). It has its own tools:
+
+  | Tool | Profile |
+  |---|---|
+  | U-Gouge, Spoon Gouge, Detail Gouge | round |
+  | V-Gouge | V |
+  | Flat Chisel | flat |
+  | Card Scraper | wide, shallow |
+  | Drawknife | wide, two handles |
+
+  - The material under the tool is really removed. A curved tool cuts several side-by-side strips, each as deep as the tool's cross-section at that point, so the groove is curved.
+  - Going over the same area again digs deeper, so you can hollow an object out.
+  - *Width* and *Depth* sliders size the tool. Direction and length follow your finger.
+  - Shavings are the removed material, shaded from the spot they came from:
+
+    | Material | Shavings |
+    |---|---|
+    | Wood | short, tight curls that snap off as chips |
+    | Soap | long, smooth ribbons |
+    | Wax | soft shavings |
+    | Chocolate | brittle curls |
+
+  - Shavings drop as physics bodies, tumble, and pile up around the object or inside a hollow, like the roughed-out *Wooden Bowl Blank*.
+  - Carving objects: basswood, walnut, cherry, an oak log round, a pine plank, a spoon blank, the bowl blank, ivory carving soap, a soap dome, jeweler's wax, layered wax and a chocolate block.
+- **Diced cubes scatter** (`src/dice.js`).
+  - Every cube detaches at once and tumbles, bounces and slides, with corner contact on the board, cube-vs-cube collisions on a hashed grid, and sleeping.
+  - The material sets the feel: soap slides, jelly bounces and jiggles, meat tumbles, kinetic sand crumbles into grains, ice and glass skate.
+  - The blade shoves cubes out of its way. Small cubes fly further, and impacts make material-matched sounds.
 - **Glass & ice**: glass has its own sound (scratch, shatter, tinkle shower) and glass shards. Squishing glass shatters it into many real pieces.
 - **Smooth on phones**:
   - Resolution adapts automatically from measured frame time, and shadows switch off if a phone still can't keep up.
@@ -104,10 +128,9 @@ src/live.js                live cutting engine: blade path, slots, peeling, curl
 src/dice.js                dicer cubes: voxelisation + lightweight pile simulation
 src/patterns.js            CPU port of the volumetric material patterns (cube colours)
 src/squish.js              squish tool: press deformation, baking, spring-back, cracking, splat
-src/bowl.js                salad mode: several objects, the bowl, gathering and tossing
 src/geometry.js            convex part kernel: split, caps, connectivity, shape generators
 src/materials.js           procedural volumetric shaders (15 patterns)
-src/catalog.js             177 object definitions (data only — add objects here)
+src/catalog.js             206 object definitions (data only — add objects here)
 src/tools.js               tool definitions, 3D knife models, icons
 src/audio.js               procedural ASMR sound engine
 src/particles.js           instanced shavings / crumbs / juice / sand / ice

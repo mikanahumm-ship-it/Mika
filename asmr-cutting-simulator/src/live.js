@@ -29,8 +29,9 @@ const UP = new THREE.Vector3(0, 1, 0);
 export function behavior(def) {
   const s = def.snd;
   const B = { style: 'crumble', rate: 14, sink: 2.2, react: 0.04, rMin: 0.07, rMax: 0.2, brittle: 0, drift: 0.04 };
-  if (s === 'soap') Object.assign(B, { style: 'curl', rate: 12, sink: 1.8, rMin: 0.045, rMax: 0.16, drift: 0.05 });
-  else if (s === 'wax') Object.assign(B, { style: 'curl', rate: 10, sink: 1.6, rMin: 0.04, rMax: 0.13, drift: 0.035 });
+  if (s === 'soap') Object.assign(B, { style: 'curl', rate: 12, sink: 1.8, rMin: 0.05, rMax: 0.18, drift: 0.05, brittle: 1.4, curlTh: 0.026 });
+  else if (s === 'wood') Object.assign(B, { style: 'curl', rate: 9, sink: 1.4, rMin: 0.02, rMax: 0.055, drift: 0.03, brittle: 0.5, react: 0, curlTh: 0.014 });
+  else if (s === 'wax') Object.assign(B, { style: 'curl', rate: 10, sink: 1.6, rMin: 0.04, rMax: 0.12, drift: 0.04, brittle: 0.55, curlTh: 0.018 });
   else if (s === 'choc') Object.assign(B, { style: 'curl', rate: 9, sink: 1.4, rMin: 0.035, rMax: 0.1, brittle: 0.55, drift: 0.02 });
   else if (s === 'cheese') Object.assign(B, { style: 'curl', rate: 11, sink: 2, rMin: 0.07, rMax: 0.22, brittle: 0.45 });
   else if (s === 'meat' || s === 'fish') Object.assign(B, { style: 'drape', rate: 13, sink: 2.4, react: 0.06, rMin: 0.08, rMax: 0.1 });
@@ -132,7 +133,10 @@ class Curl {
     const c = g.boundingBox.getCenter(new THREE.Vector3());
     g.translate(-c.x, -c.y, -c.z);
     this.mesh.position.copy(c);
-    const h = this.game.physics.createHull(g.attributes.position.array, c);
+    // a light hull: ~48 evenly spread vertices are plenty for a curl
+    const src = g.attributes.position.array, cnt = src.length / 3, step = Math.max(1, Math.floor(cnt / 48)), pts = [];
+    for (let i = 0; i < cnt; i += step) pts.push(src[i * 3], src[i * 3 + 1], src[i * 3 + 2]);
+    const h = this.game.physics.createHull(pts, c);
     return { mesh: this.mesh, h, mats: this.mats };
   }
   dispose() { this.game.scene.remove(this.mesh); this.mesh.geometry.dispose(); this.mats.forEach(m => m.dispose()); }
@@ -269,11 +273,22 @@ export function installLive(Game, helpers) {
 
   // One step of real material removal between A and B.
   P.liveSegment = function (s, A, B, t, tool, anchor = A) {
+    if (tool.profile && !tool.stripCall) {
+      // curved / V tools: several side-by-side strips, each as deep as the
+      // tool's cross-section at that point -> a real curved groove
+      const W = tool.width * (this.ui.widthScale || 1), D = tool.depth * (this.ui.depthScale || 1);
+      const n0 = new THREE.Vector3().crossVectors(t, new THREE.Vector3(0, -1, 0)).normalize();
+      const mid = Math.floor(tool.profile.length / 2);
+      s.curlW = W;
+      tool.profile.forEach((st, k) => this.liveSegment(s, A, B, t,
+        { ...tool, stripCall: true, absW: st.w * W * 1.02, absD: st.d * D, strip: k, curl: k === mid }, anchor.clone().addScaledVector(n0, st.o * W)));
+      return;
+    }
     const isDice = tool.kind === 'dice';
     const isKnife = tool.kind === 'knife' || isDice;
     const ui = this.ui;
-    const width = isDice ? 8 : isKnife ? (tool.kerf || 0.034) : tool.width * (ui.widthScale || 1);
-    const depth = isKnife ? Infinity : tool.depth * (ui.depthScale || 1);
+    const width = isDice ? 8 : isKnife ? (tool.kerf || 0.034) : (tool.absW ?? tool.width * (ui.widthScale || 1));
+    const depth = isKnife ? Infinity : (tool.absD ?? tool.depth * (ui.depthScale || 1));
     const tiltR = isKnife ? THREE.MathUtils.degToRad(this.tilt) : 0;
     const dn = new THREE.Vector3(0, -1, 0).applyAxisAngle(t, tiltR);
     const n = new THREE.Vector3().crossVectors(t, dn).normalize();
@@ -326,7 +341,7 @@ export function installLive(Game, helpers) {
     } else {
       floorY = Math.max(top - depth, 0.012);
       if (top - floorY < 0.004) return;
-      s.psegs.push({ A: A.clone(), B: B.clone(), t: t.clone(), anchor: anchor.clone(), floorY, width, tilt: 0 });
+      s.psegs.push({ A: A.clone(), B: B.clone(), t: t.clone(), anchor: anchor.clone(), floorY, width, tilt: 0, strip: tool.strip || 0 });
     }
     const removed = [];
     for (const { b, part } of inRegion) {
@@ -359,7 +374,7 @@ export function installLive(Game, helpers) {
       s.chop = (s.chop || 0) + A.distanceTo(B);
       if (s.chop > 0.09) { s.chop = 0; this.audio.chop(body0.def.snd, made); }
     } else if (isKnife) this.knifeSpray(s, B, top, body0, vol);
-    else this.peelMaterial(s, A, B, t, n, top, floorY, removed, beh);
+    else if (!tool.stripCall || tool.curl) this.peelMaterial(s, A, B, t, n, top, floorY, removed, beh);
   };
 
   // tiny dust / juice at the blade while slicing
@@ -388,8 +403,9 @@ export function installLive(Game, helpers) {
       }
       const inv = b.mesh.quaternion.clone().invert();
       const toL = (p) => p.clone().sub(b.mesh.position).applyQuaternion(inv);
-      const width = this.tool.width * (this.ui.widthScale || 1);
-      const th = Math.max(0.006, top - floorY);
+      const width = s.curlW || this.tool.width * (this.ui.widthScale || 1);
+      // a shaving is a thin, stretched strip: thinner than the groove is deep
+      const th = Math.max(0.006, Math.min(top - floorY, beh.curlTh || 0.035));
       const sideL = n.clone().applyQuaternion(inv).normalize();
       const k = Math.max(1, Math.round(A.distanceTo(B) / STEP_S));
       for (let i = 0; i < k; i++) {
@@ -397,7 +413,8 @@ export function installLive(Game, helpers) {
         const tp = p.clone(); tp.y = top - 0.002; const bt = p.clone(); bt.y = floorY + 0.002;
         s.curl.add({ top: toL(tp), bot: toL(bt), side: sideL, w: width, th });
       }
-      if (beh.brittle && s.curl.length > beh.brittle) this.dropCurl(s, true);
+      if (!s.breakAt) s.breakAt = beh.brittle * (0.6 + Math.random() * 0.8);
+      if (beh.brittle && s.curl.length > s.breakAt) { this.dropCurl(s, true); s.breakAt = 0; }
     } else if (beh.style === 'chunk') {
       if (!s.chunk) s.chunk = { def, src: b, parts: [], mesh: null, lift: 0 };
       for (const r of removed) s.chunk.parts.push(r.part);
@@ -433,8 +450,8 @@ export function installLive(Game, helpers) {
         d.h.rb.setAngvel({ x: (Math.random() - .5) * 3, y: (Math.random() - .5) * 2, z: (Math.random() - .5) * 3 }, true);
       }
       this.curls.push(d);
-      if (brittle) this.audio.finish('choc', { weight: 0.2 }, 0);
-      while (this.curls.length > 40) this.removeCurl(this.curls[0]);
+      if (brittle) { if (s.contactBody && s.contactBody.def.snd === 'wood') this.audio.chip(); else this.audio.finish('choc', { weight: 0.2 }, 0); }
+      while (this.curls.length > 48) this.removeCurl(this.curls[0]);
     }
   };
   P.removeCurl = function (c) {
@@ -561,12 +578,12 @@ export function installLive(Game, helpers) {
   // body stays a handful of clean convex parts (no seams, no slowdown).
   P.rebakeBody = function (s, b, isKnife, collect = false) {
     const o = s.orig.get(b); if (!o) return null;
-    const segs = isKnife ? s.segs.slice(o.seg0) : s.psegs.slice(o.pseg0);
+    const segs = isKnife ? s.segs.slice(o.seg0) : s.psegs.slice(o.pseg0).sort((a, b) => (a.strip || 0) - (b.strip || 0));
     if (!segs.length) return null;
     // 1) continuous chains (same tilt/width, connected) -> one simplified line each
     // 2) every straight line is split only by depth, so all its sections share
     //    exactly the same side planes (their internal faces line up perfectly)
-    const chain = (p, g) => p.B.distanceTo(g.A) < 1e-4 && g.tilt === p.tilt && Math.abs(g.width - p.width) < 1e-6;
+    const chain = (p, g) => p.B.distanceTo(g.A) < 1e-4 && g.tilt === p.tilt && Math.abs(g.width - p.width) < 1e-6 && (p.strip || 0) === (g.strip || 0);
     const sameFloor = (p, g) => (g.floorY <= -1 && p.floorY <= -1) || (g.floorY > -1 && p.floorY > -1 && Math.abs(g.floorY - p.floorY) < (isKnife ? 0.05 : 0.004));
     const runs = [];
     const flush = (grp) => {

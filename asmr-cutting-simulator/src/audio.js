@@ -23,6 +23,7 @@ const PROFILES = {
   ice:    { f: 5200, q: 2.5, d: 0.01, rate: 30, g: 0.55, crisp: 1.5, ice: 1 },
   choc:   { f: 3200, q: 1.6, d: 0.012, rate: 26, g: 0.6, crisp: 1, snap: 1 },
   soft:   { f: 1500, q: 0.8, d: 0.04, rate: 50, g: 0.3 },
+  wood:   { f: 2300, q: 1.7, d: 0.022, rate: 85, g: 0.42, crisp: 0.7, low: 170 },
   glass:  { f: 6800, q: 3.0, d: 0.008, rate: 34, g: 0.5, crisp: 1.6, ice: 1, glass: 1 },
 };
 
@@ -188,6 +189,13 @@ export class Audio {
       if (Math.random() < 0.35) this.tone(tt, 700 + Math.random() * 500, 0.025, 0.04);
       if (P.wet && Math.random() < 0.3) this.squelch(tt, 0.05, 0);
     }
+  }
+  // a wood chip breaking off the gouge
+  chip() {
+    if (!this.ok) return;
+    const t = this.ctx.currentTime;
+    this.noiseBurst(t, 3200 + Math.random() * 1200, 2000, 3, 0.18, 0.025);
+    this.tone(t, 520 + Math.random() * 200, 0.05, 0.05);
   }
   // cubes landing / colliding: list = [prof, speed, prof, speed, ...]
   cubeHits(list) {

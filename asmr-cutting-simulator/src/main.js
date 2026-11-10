@@ -42,9 +42,14 @@ window.game = game; // handy for debugging
 
 // ---------------------------------------------------------------- tools
 const unlocked = (t) => !t.unlock || game.stats.cuts >= t.unlock;
+// Cut and Carve are separate modes, each with its own tools
+const areaOf = (t) => (t.mode === 'carve' ? 'carve' : 'cut');
+const lastTool = { cut: 'chef', carve: 'ugouge' };
 function renderToolbar() {
   const bar = $('#toolbar'); bar.innerHTML = '';
-  for (const t of TOOLS.filter(unlocked)) {
+  const area = areaOf(game.tool);
+  $$('[data-area]').forEach(b => b.classList.toggle('on', b.dataset.area === area));
+  for (const t of TOOLS.filter(unlocked).filter(t => areaOf(t) === area)) {
     const b = document.createElement('button');
     b.className = 'tool glass' + (t.id === game.toolId ? ' on' : '');
     b.innerHTML = toolIcon(t) + `<span>${t.name}</span>`;
@@ -59,13 +64,15 @@ function renderToolbar() {
   bar.appendChild(more);
 }
 function selectTool(id) {
+  lastTool[areaOf(TOOLS.find(t => t.id === id))] = id;
   game.setTool(id); game.audio.ui(); renderToolbar(); renderToolSheet();
   const t = game.tool;
   $('#sizeWrap').classList.toggle('hidden', t.kind === 'knife');
   $('#thickWrap').classList.toggle('hidden', t.kind === 'knife' || t.kind === 'dice');
   $('#sizeLbl').textContent = t.kind === 'dice' ? 'Cube size' : t.kind === 'squish' ? 'Press size' : 'Width';
   $('#thickWrap').classList.toggle('hidden', t.kind !== 'shave' && t.kind !== 'carve');
-  $$('[data-guide], .modebar .divider').forEach(b => b.classList.toggle('hidden', t.kind === 'squish' || t.kind === 'dice'));
+  $$('[data-guide], .modebar .divider').forEach(b => b.classList.toggle('hidden', t.kind !== 'knife'));
+  $('#thickLbl').textContent = areaOf(t) === 'carve' ? 'Depth' : 'Thickness';
   $('#tiltWrap').classList.toggle('hidden', t.kind !== 'knife' || game.mode !== 'vertical');
   $$('[data-mode]').forEach(b => b.classList.toggle('hidden', t.kind !== 'knife'));
 }
@@ -187,6 +194,7 @@ $$('.sheet-card').forEach(card => {
 
 // ---------------------------------------------------------------- controls
 $('#objBtn').onclick = () => openSheet('#objSheet');
+$$('[data-area]').forEach(b => b.onclick = () => { if (areaOf(game.tool) !== b.dataset.area) { selectTool(lastTool[b.dataset.area]); if (b.dataset.area === 'carve') toast('Carving: drag across the surface, go over it again to dig deeper'); } });
 $('#setBtn').onclick = () => openSheet('#setSheet');
 $('#search').oninput = () => renderObjects();
 $('#undoBtn').onclick = () => game.undo();

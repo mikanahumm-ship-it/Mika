@@ -7,7 +7,7 @@ import * as THREE from 'three';
 export const PAT = {
   solid: 0, meat: 1, layers: 2, swirl: 3, speckle: 4, radial: 5, crumb: 6,
   grain: 7, stripes: 8, rainbow: 9, rings: 10, grady: 11, citrus: 12, dots: 13,
-  angular: 14,
+  angular: 14, checker: 15,
 };
 
 const NOISE = /* glsl */`
@@ -112,6 +112,11 @@ vec3 patColor(vec3 p){
   float s = sin(ang*uS + fbm(p*2.)*2.);
   col = mix(uC1, uC2, smoothstep(-uP.x, uP.x, s));
   col *= .92 + .14*fbm(p*8.);
+#elif PAT == 15
+  // checker in the y/z cross-section (Battenberg); P.x > .5 makes it a full 3D checker
+  float k = floor((p.y - uCenter.y) * uS) + floor((p.z - uCenter.z) * uS) + (uP.x > .5 ? floor((p.x - uCenter.x) * uS) : 0.);
+  col = mod(k, 2.) < 1. ? uC1 : uC2;
+  col *= .95 + .08*fbm(p*10.);
 #endif
   return col;
 }

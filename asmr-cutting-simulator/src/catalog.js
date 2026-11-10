@@ -20,6 +20,7 @@ const ell = (a, b, c, flat = 0.15) => ({ type: 'ell', a, b, c, flat });
 export const CATEGORIES = [
   { id: 'viral', name: 'Viral & Squishy' },
   { id: 'glass', name: 'Glass & Ice' },
+  { id: 'carving', name: 'Carving' },
   { id: 'meat', name: 'Meat & Fish' },
   { id: 'sushi', name: 'Sushi' },
   { id: 'bakery', name: 'Bakery' },
@@ -256,6 +257,43 @@ add(G, 'icepop', 'Rainbow Ice Pop', box(1.0, 0.3, 0.45, 0.15), S(PAT.layers, ['#
 add(G, 'flowerice', 'Frozen Flower Ice', box(0.8, 0.6, 0.8, 0.08), S(PAT.dots, ['#eef9ff', '#ff8fb5', '#ffd84d', '#c9a2ff'], 3.2, [0.16]), S(PAT.dots, ['#eef9ff', '#ff8fb5', '#ffd84d', '#c9a2ff'], 3.2, [0.16]), iceM(0.6, { star: true }));
 add(G, 'lemonice', 'Lemon Slice Ice Ball', ell(0.7, 0.7, 0.7, 0.06), S(PAT.dots, ['#eef9ff', '#f6e24a', '#fff3a0', '#f6e24a'], 3, [0.2]), S(PAT.dots, ['#eef9ff', '#f6e24a', '#fff3a0', '#f6e24a'], 3, [0.2]), iceM(0.6));
 add(G, 'icicle', 'Icicle Block', cyl(0.45, 0.9, 0.1, { rTop: 0.25 }), S(PAT.stripes, ['#e6f6ff', '#cfeaf9', '#ffffff'], 6, [0.2]), S(PAT.solid, ['#e6f6ff', '#f5fbff'], 3), iceM(0.55));
+
+// ======================= CARVING =======================
+// Woods, a roughed-out bowl blank, carving soap, wax and chocolate.
+const wood = (extra = {}) => ({ snd: 'wood', fx: 'crumb', mat: { rough: 0.75 }, ...extra });
+const grain = (a, b, c, s = 16, p = 0.22) => S(PAT.stripes, [a, b, c], s, [p]);
+const C = 'carving';
+add(C, 'basswood', 'Basswood Carving Block', box(1.0, 0.5, 0.7, 0.03), grain('#efdcb6', '#e5cfa3', '#d2b585'), grain('#f2e1bd', '#e8d3a8', '#d6bb8c', 18, 0.25), wood({ star: true }));
+add(C, 'bowlblank', 'Wooden Bowl Blank', { type: 'cyl', rad: 1.05, hy: 0.42, r: 0.1, cavity: [{ r: 0.86, d: 0.18 }, { r: 0.7, d: 0.3 }, { r: 0.5, d: 0.38 }, { r: 0.28, d: 0.43 }] }, grain('#d9b07a', '#c99c63', '#a87842', 12, 0.3), grain('#e2bb84', '#d2a56c', '#b0814a', 12, 0.3), wood({ star: true }));
+add(C, 'walnutblock', 'Walnut Block', box(0.95, 0.5, 0.65, 0.03), grain('#6b4630', '#5a3a27', '#3f281b'), grain('#73503a', '#614230', '#45301f'), wood());
+add(C, 'cherryblock', 'Cherry Wood Block', box(0.95, 0.5, 0.65, 0.03), grain('#b9714a', '#a8613e', '#8a4a2e'), grain('#c27b52', '#b06a45', '#8f5233'), wood());
+add(C, 'oakround', 'Oak Log Round', cyl(0.85, 0.35, 0.06), S(PAT.grain, ['#5b4330', '#6e5440', '#3e2e22'], 1, [0.4]), S(PAT.rings, ['#d8b47e', '#b88a52'], 9, [0.12], { axis: [0, 1, 0] }), wood());
+add(C, 'pineplank', 'Pine Plank', box(1.25, 0.25, 0.6, 0.03), grain('#ecd09a', '#dab676', '#b8894a', 12, 0.3), grain('#efd5a3', '#ddbb7e', '#bb8d4f', 12, 0.3), wood());
+add(C, 'spoonblank', 'Spoon Carving Blank', box(1.3, 0.28, 0.42, 0.1), grain('#f0dfbd', '#e5d0a6', '#cfb184'), grain('#f3e4c4', '#e8d4ac', '#d3b68a'), wood());
+add(C, 'carvesoap', 'Ivory Carving Soap', box(0.9, 0.5, 0.6, 0.06), S(PAT.solid, ['#fbf8f1', '#f3eee3'], 4), S(PAT.solid, ['#fdfbf6', '#f5f1e8'], 5), { snd: 'soap', fx: 'shave', mat: { rough: 0.45, sheen: 0.3 }, star: true });
+add(C, 'carvewax', "Jeweler's Carving Wax", box(0.9, 0.45, 0.6, 0.04), S(PAT.solid, ['#5fa06e', '#6aae7a'], 4), S(PAT.solid, ['#64a673', '#70b480'], 5), { snd: 'wax', fx: 'shave', mat: { rough: 0.3, clearcoat: 0.3 } });
+add(C, 'layerwax', 'Layered Carving Wax', box(0.9, 0.5, 0.6, 0.04), S(PAT.layers, ['#ff8fa3', '#ffd27a', '#8fd6b8', '#9db8ff'], 8, [0.04, 0, 4, 0.06]), S(PAT.layers, ['#ff8fa3', '#ffd27a', '#8fd6b8', '#9db8ff'], 8, [0.04, 0, 4, 0.06]), { snd: 'wax', fx: 'shave', mat: { rough: 0.35, sheen: 0.2 } });
+add(C, 'carvechoc', 'Chocolate Carving Block', box(1.0, 0.45, 0.65, 0.04), S(PAT.solid, ['#4a2618', '#58301f'], 4, null, { rough: 0.3 }), S(PAT.solid, ['#4f2a1b', '#5f3523'], 6), { snd: 'choc', fx: 'choc', mat: { rough: 0.35, clearcoat: 0.5 } });
+add(C, 'soapdome', 'Soap Dome', { type: 'dome', a: 0.85, b: 0.6 }, S(PAT.solid, ['#cfe8f2', '#e0f1f7'], 4), S(PAT.solid, ['#d3eaf3', '#e4f3f8'], 5), { snd: 'soap', fx: 'shave', mat: { rough: 0.45, sheen: 0.3 } });
+
+// ======================= MORE TO CUT =======================
+add('cake', 'battenberg', 'Battenberg Cake', box(1.2, 0.32, 0.32, 0.03), S(PAT.speckle, ['#f4d9a0', '#efcf8c', '#e0b870'], 6, [0.8, 0.4]), S(PAT.checker, ['#f6b8c6', '#f7e3a1'], 3.2, [0], { center: [0, 0.32, 0] }), { snd: 'cake', fx: 'crumb', mat: { rough: 0.7 }, star: true });
+add('soap', 'checkersoap', 'Checkerboard Soap', box(0.9, 0.45, 0.6, 0.06), S(PAT.checker, ['#b9e3f2', '#fbe0ea'], 6, [1]), S(PAT.checker, ['#b9e3f2', '#fbe0ea'], 6, [1]), { snd: 'soap', fx: 'shave', mat: { rough: 0.45, sheen: 0.3 } });
+add('soap', 'watermelonsoap', 'Watermelon Soap', box(1.0, 0.45, 0.6, 0.06), S(PAT.layers, ['#5fbf6a', '#fbf7ee', '#f2697a'], 3.4, [0.04, 0, 3, 0.05]), S(PAT.layers, ['#5fbf6a', '#fbf7ee', '#f2697a'], 3.4, [0.04, 0, 3, 0.05]), { snd: 'soap', fx: 'shave', mat: { rough: 0.45, sheen: 0.3 } });
+add('soap', 'honeysoap', 'Honeycomb Soap', box(0.9, 0.45, 0.6, 0.08), S(PAT.crumb, ['#f4b63c', '#f7c85a', '#d38c1c'], 8, [0.35]), S(PAT.crumb, ['#f4b63c', '#f7c85a', '#d38c1c'], 8, [0.35]), { snd: 'soap', fx: 'shave', mat: { rough: 0.2, clearcoat: 0.8, opacity: 0.88 } });
+add('meat', 'kamaboko', 'Fish Cake Roll', { type: 'cylx', rad: 0.42, hx: 1.1, r: 0.03, clips: [{ n: [0, -1, 0], c: 0 }] }, S(PAT.solid, ['#f28aa8', '#f59ab5'], 4), S(PAT.radial, ['#f28aa8', '#fdf7f7', '#fdf7f7', '#fdf7f7'], 0, [0.9, 0.88, 0, 0.42], { axis: [1, 0, 0], center: [0, 0, 0] }), { snd: 'fish', fx: 'none', mat: { rough: 0.45 } });
+add('meat', 'luncheon', 'Luncheon Meat Block', box(0.9, 0.4, 0.55, 0.06), S(PAT.solid, ['#e7a39b', '#efb3ab'], 4), S(PAT.speckle, ['#eaa59d', '#f0b6ae', '#fbe2dc'], 9, [0.8, 0.6]), { snd: 'meat', fx: 'juice', mat: { rough: 0.4, clearcoat: 0.3 } });
+add('cake', 'lemonbar', 'Lemon Bar', box(1.0, 0.25, 0.7, 0.03), S(PAT.grady, ['#e2b56a', '#f7e05e'], 1, [0.16, 0.18, 0]), S(PAT.grady, ['#e2b56a', '#f7e05e'], 1, [0.16, 0.18, 0]), { snd: 'cake', fx: 'crumb', mat: { rough: 0.5, clearcoat: 0.3 } });
+add('sweet', 'crispytreat', 'Crispy Rice Treat', box(1.0, 0.35, 0.7, 0.06), S(PAT.crumb, ['#f3e3bd', '#e9d39f', '#c9ac70'], 14, [0.5]), S(PAT.crumb, ['#f3e3bd', '#e9d39f', '#c9ac70'], 14, [0.5]), { snd: 'crunch', fx: 'crumb', mat: { rough: 0.7 } });
+add('sweet', 'jellocake', 'Layered Jello Cake', cyl(0.85, 0.5, 0.05), S(PAT.layers, ['#ff4f6d', '#fff3e6', '#4fb3ff', '#fff3e6'], 8, [0.02, 0, 4, 0.06]), S(PAT.layers, ['#ff4f6d', '#fff3e6', '#4fb3ff', '#fff3e6'], 8, [0.02, 0, 4, 0.06]), { snd: 'jelly', fx: 'jelly', wob: 0.9, mat: { rough: 0.1, clearcoat: 1, opacity: 0.88, spec: 1 } });
+add('sweet', 'rainbowjelly', 'Rainbow Jelly Cube', box(0.75, 0.75, 0.75, 0.1), S(PAT.layers, ['#ff5d7a', '#ffb347', '#ffe066', '#6fd3a8'], 2.7, [0.04, 0, 4, 0.06]), S(PAT.layers, ['#ff5d7a', '#ffb347', '#ffe066', '#6fd3a8'], 2.7, [0.04, 0, 4, 0.06]), { snd: 'jelly', fx: 'jelly', wob: 1, mat: { rough: 0.08, clearcoat: 1, opacity: 0.84, spec: 1 } });
+add('cake', 'poundcake', 'Pound Cake', box(1.2, 0.5, 0.6, 0.25), S(PAT.speckle, ['#c9893f', '#dba45c', '#8f5622'], 4, [0.75, 0.6]), S(PAT.crumb, ['#f7dc8f', '#f2d07a', '#d9b25a'], 10, [0.5]), { snd: 'cake', fx: 'crumb', mat: { rough: 0.8 } });
+add('fruit', 'papaya', 'Papaya', ell(0.95, 0.55, 0.6, 0.12), S(PAT.grady, ['#9fbf3c', '#f2a93b'], 1, [0.3, 1.0, 0.3]), S(PAT.radial, ['#e8a23a', '#f58a4b', '#f58a4b', '#2a1a14'], 0, [0.95, 0.85, 0.22, 0.58], { axis: [1, 0, 0], center: [0, 0.5, 0] }), { snd: 'fruit', fx: 'juice', mat: { rough: 0.4, clearcoat: 0.4 } });
+add('fruit', 'plum', 'Plum', ell(0.6, 0.58, 0.6, 0.12), S(PAT.solid, ['#5a1f4a', '#6e2a5a'], 4), S(PAT.radial, ['#5a1f4a', '#f2c14e', '#f2c14e', '#8a4a2e'], 0, [0.96, 0.9, 0.25, 0.55], { axis: [0, 0, 0], center: [0, 0.5, 0] }), { snd: 'fruit', fx: 'juice', mat: { rough: 0.3, clearcoat: 0.6 } });
+add('fruit', 'lychee', 'Giant Lychee', ell(0.6, 0.65, 0.6, 0.1), S(PAT.grain, ['#c43a4a', '#d85a5a', '#8a2030'], 1.4, [0.5]), S(PAT.radial, ['#c43a4a', '#fbf8f4', '#f5f1ea', '#5a3220'], 0, [0.95, 0.9, 0.28, 0.6], { axis: [0, 0, 0], center: [0, 0.58, 0] }), { snd: 'fruit', fx: 'juice', mat: { rough: 0.5 } });
+add('fruit', 'persimmon', 'Persimmon', ell(0.65, 0.5, 0.65, 0.15), S(PAT.solid, ['#f07a1e', '#f5892e'], 4), S(PAT.citrus, ['#f07a1e', '#f79a3a', '#f8b05a', '#f79a3a'], 8, [0.96, 0.9, 0, 0.65], { axis: [0, 1, 0], center: [0, 0.42, 0] }), { snd: 'fruit', fx: 'juice', mat: { rough: 0.3, clearcoat: 0.6 } });
+add('soft', 'rainbowsand', 'Rainbow Kinetic Sand Brick', box(1.0, 0.5, 0.6, 0.03), S(PAT.layers, ['#ffb3c1', '#ffe0a3', '#b8f0c8', '#b8d4ff'], 8, [0.05, 0, 4, 0.05]), S(PAT.layers, ['#ffb3c1', '#ffe0a3', '#b8f0c8', '#b8d4ff'], 8, [0.05, 0, 4, 0.05]), { snd: 'sand', fx: 'sand', mat: { rough: 1 } });
+add('cheese', 'paneer', 'Paneer Block', box(0.9, 0.4, 0.6, 0.03), S(PAT.solid, ['#fbf8ef', '#f3eedf'], 4), S(PAT.crumb, ['#fdfaf2', '#f5f0e3', '#e7dfcb'], 12, [0.55]), { snd: 'cheese', fx: 'crumb', mat: { rough: 0.7 } });
 
 export const OBJECTS = L;
 export const byId = Object.fromEntries(L.map(o => [o.id, o]));

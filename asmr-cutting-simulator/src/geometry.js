@@ -60,6 +60,7 @@ export class Part {
     return this._vol;
   }
   bounds() {
+    if (this._b) return this._b;
     const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
     for (const f of this.faces) {
       const p = f.pts;
@@ -481,6 +482,33 @@ function orient(faces) {
 }
 
 // Shape spec -> Part (bottom resting at y=0, centred in x/z)
+// A shape may come pre-hollowed (e.g. a roughed-out bowl blank): each ring
+// removes a polygonal cylinder from the top down to its depth, leaving a
+// terraced cavity made of properly glued convex parts.
+export function makeParts(s) {
+  const base = makeShape(s);
+  if (!s.cavity) return [base];
+  // each ring only cuts the remaining core below the previous ring's floor
+  const top = base.bounds().mx[1], keep = [];
+  let core = base;
+  for (const ring of s.cavity) {
+    const sides = ring.sides || 12;
+    let cur = core;
+    for (let k = 0; k < sides && cur; k++) {
+      const a = (k / sides) * Math.PI * 2, n = [-Math.cos(a), 0, -Math.sin(a)];
+      const r = splitPart(cur, n, -ring.r, 2);
+      if (r.back) keep.push(r.back);
+      cur = r.front;
+    }
+    if (!cur) { core = null; break; }
+    const f = splitPart(cur, [0, 1, 0], top - ring.d, 1);
+    core = f.back; // material above the floor is removed
+    if (!core) break;
+  }
+  if (core) keep.push(core);
+  return keep;
+}
+
 export function makeShape(s) {
   let faces;
   const q = s.q || 1; // quality multiplier
@@ -548,7 +576,7 @@ export function makeShape(s) {
     if (f.plane) f.plane = { n: f.plane.n, c: f.plane.c + dot(f.plane.n, off) };
     if (f.type !== 0) f.type = 0;
   }
-  part._vol = null;
+  part._vol = null; part._b = null;
   return part;
 }
 

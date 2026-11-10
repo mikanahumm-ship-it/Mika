@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
-import { makeShape, splitPart, components, Part } from './geometry.js';
+import { makeShape, makeParts, splitPart, components, Part } from './geometry.js';
 import { makeMaterial, surfColor } from './materials.js';
 import { OBJECTS, byId } from './catalog.js';
 import { TOOLS, buildToolModel } from './tools.js';
@@ -304,8 +304,8 @@ export class Game {
     this.current = def;
     this.clearAll();
     this.undoStack = [];
-    const part = makeShape(def.shape);
-    this.addBody(def, [part], new THREE.Vector3(0, drop ? 0.35 : 0.002, 0), new THREE.Quaternion());
+    const parts = makeParts(def.shape), part = parts[0];
+    this.addBody(def, parts, new THREE.Vector3(0, drop ? 0.35 : 0.002, 0), new THREE.Quaternion());
     if (drop) setTimeout(() => { this.audio.tick(0.22); this.wobbleAll(0.5); }, 170);
     const bb = part.bounds(); const size = Math.max(bb.mx[0] - bb.mn[0], bb.mx[1] - bb.mn[1], bb.mx[2] - bb.mn[2]);
     this.audio.objPitch = THREE.MathUtils.clamp(2.2 / size, 0.8, 1.35);
@@ -342,6 +342,13 @@ export class Game {
   }
   // Glue-split `part` down to the region; returns {inside, outside[]}
   clipRegion(part, planes) {
+    // cheap reject: is the part's bounding box entirely outside one plane?
+    const { mn, mx } = part.bounds();
+    for (const pl of planes) {
+      const n = pl.n;
+      const hiB = (n[0] > 0 ? mx[0] : mn[0]) * n[0] + (n[1] > 0 ? mx[1] : mn[1]) * n[1] + (n[2] > 0 ? mx[2] : mn[2]) * n[2] - pl.c;
+      if (hiB <= 2e-5) return { inside: null, outside: [part] };
+    }
     for (const pl of planes) { const [, hi] = part.range(pl.n, pl.c); if (hi <= 2e-5) return { inside: null, outside: [part] }; }
     const outside = []; let cur = part;
     for (const pl of planes) {

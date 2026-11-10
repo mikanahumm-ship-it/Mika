@@ -4,6 +4,10 @@ import * as THREE from 'three';
 //        shave  -> removes a thin layer under the stroke (soap shavings)
 //        carve  -> removes a narrow deep groove (carving / scooping)
 // path:  stroke modifier applied to the real path you drew (zigzag/wave)
+// cross-section profiles for curved / V carving tools: strips {o: offset, w: width, d: depth} (fractions)
+const roundProfile = (k) => Array.from({ length: k }, (_, i) => { const o = (i + 0.5) / k - 0.5; return { o, w: 1 / k, d: Math.max(0.22, Math.sqrt(Math.max(0, 1 - (o / 0.5) ** 2))) }; });
+const vProfile = (k) => Array.from({ length: k }, (_, i) => { const o = (i + 0.5) / k - 0.5; return { o, w: 1 / k, d: Math.max(0.18, 1 - Math.abs(o) * 2) }; });
+
 export const TOOLS = [
   { id: 'chef', name: "Chef's Knife", kind: 'knife', len: 1.6, h: 0.42, prof: 'chef', weight: 1, pitch: 1, push: 1 },
   { id: 'dicer', name: 'Dicer', kind: 'dice', len: 2.7, h: 0.55, prof: 'dicer', weight: 1.2, pitch: 0.95, cube: 0.08 },
@@ -32,6 +36,14 @@ export const TOOLS = [
   { id: 'scoop', name: 'Melon Scoop', kind: 'carve', len: 0.5, h: 0.2, prof: 'gouge', weight: 0.7, pitch: 0.9, width: 0.3, depth: 0.24, unlock: 100 },
   { id: 'obsidian', name: 'Obsidian Blade', kind: 'knife', len: 1.5, h: 0.36, prof: 'santoku', weight: 0.8, pitch: 1.2, push: 0.8, finish: 'obsidian', unlock: 180 },
   { id: 'laser', name: 'Light Blade', kind: 'knife', len: 1.8, h: 0.12, prof: 'laser', weight: 0.3, pitch: 1.6, push: 0.5, whistle: true, unlock: 300 },
+  // ---- carving mode ----
+  { id: 'ugouge', name: 'U-Gouge', mode: 'carve', kind: 'carve', len: 0.6, h: 0.18, prof: 'gouge', weight: 0.7, pitch: 1, width: 0.26, depth: 0.09, profile: roundProfile(5) },
+  { id: 'vgouge', name: 'V-Gouge', mode: 'carve', kind: 'carve', len: 0.6, h: 0.18, prof: 'vgouge', weight: 0.7, pitch: 1.1, width: 0.2, depth: 0.1, profile: vProfile(5) },
+  { id: 'chisel', name: 'Flat Chisel', mode: 'carve', kind: 'carve', len: 0.6, h: 0.18, prof: 'chisel', weight: 0.8, pitch: 0.95, width: 0.24, depth: 0.05 },
+  { id: 'spoongouge', name: 'Spoon Gouge', mode: 'carve', kind: 'carve', len: 0.6, h: 0.22, prof: 'gouge', weight: 0.8, pitch: 0.9, width: 0.42, depth: 0.16, profile: roundProfile(5) },
+  { id: 'detailgouge', name: 'Detail Gouge', mode: 'carve', kind: 'carve', len: 0.5, h: 0.14, prof: 'gouge', weight: 0.5, pitch: 1.25, width: 0.11, depth: 0.05, profile: roundProfile(3) },
+  { id: 'scraper', name: 'Card Scraper', mode: 'carve', kind: 'shave', len: 0.5, h: 0.3, prof: 'scraper', weight: 0.5, pitch: 1.3, width: 0.6, depth: 0.014 },
+  { id: 'drawknife', name: 'Drawknife', mode: 'carve', kind: 'shave', len: 0.6, h: 0.2, prof: 'drawknife', weight: 0.9, pitch: 0.95, width: 0.9, depth: 0.035 },
 ];
 
 export const FINISHES = [
@@ -115,19 +127,34 @@ export function buildToolModel(tool, finishId, handleId, opts) {
     knob.position.y = 0.7; knob.castShadow = true; g.add(knob);
     return g;
   }
-  if (tool.prof === 'shaver' || tool.prof === 'gouge') {
+  if (['shaver', 'gouge', 'vgouge', 'chisel', 'scraper', 'drawknife'].includes(tool.prof)) {
     // Peeling blade: the cutting edge sits at the origin; a thin plate rises
     // forward from it at a rake angle (shavings ride up its top face and roll
     // over), and the handle angles back toward the player.
-    const w = (opts && opts.width) || tool.width, rake = 0.5, plateL = 0.16;
-    const plateGeo = tool.prof === 'shaver'
-      ? new THREE.BoxGeometry(plateL, 0.012, w)
-      : new THREE.CylinderGeometry(w / 2, w / 2, plateL, 18, 1, true, Math.PI / 2, Math.PI);
-    if (tool.prof === 'gouge') plateGeo.rotateZ(-Math.PI / 2);
-    plateGeo.translate(plateL / 2, tool.prof === 'gouge' ? w / 2 : 0.006, 0);
+    const w = (opts && opts.width) || tool.width, pr = tool.prof;
+    const rake = pr === 'scraper' ? 1.15 : 0.5, plateL = pr === 'scraper' ? 0.3 : pr === 'chisel' ? 0.2 : 0.16;
+    let plateGeo;
+    if (pr === 'gouge' || pr === 'vgouge') {
+      // U: half tube; V: the same with two flat facets
+      plateGeo = new THREE.CylinderGeometry(w / 2, w / 2, plateL, pr === 'vgouge' ? 2 : 18, 1, true, Math.PI / 2, Math.PI);
+      plateGeo.rotateZ(-Math.PI / 2);
+      plateGeo.translate(plateL / 2, w / 2, 0);
+    } else {
+      plateGeo = new THREE.BoxGeometry(plateL, pr === 'chisel' ? 0.024 : 0.012, w);
+      plateGeo.translate(plateL / 2, 0.006, 0);
+    }
     plateGeo.rotateZ(rake);
     const pm = bladeMat.clone(); pm.side = THREE.DoubleSide;
     const plate = new THREE.Mesh(plateGeo, pm); plate.castShadow = true; g.add(plate);
+    if (pr === 'scraper') return g; // a card scraper is held by its edges
+    if (pr === 'drawknife') {
+      for (const sz of [-1, 1]) {
+        const tang = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 8), bladeMat); tang.rotation.x = Math.PI / 2; tang.position.set(0.02, 0.02, sz * (w / 2 + 0.06)); g.add(tang);
+        const grip = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.22, 6, 12), handleMat);
+        grip.rotation.z = -1.0; grip.position.set(-0.08, 0.12, sz * (w / 2 + 0.12)); grip.castShadow = true; g.add(grip);
+      }
+      return g;
+    }
     const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.1, 12), bladeMat);
     ferrule.rotation.z = -1.1; ferrule.position.set(-0.04, 0.05, 0); g.add(ferrule);
     const handle = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.24, 6, 14), handleMat);
@@ -209,6 +236,10 @@ export function toolIcon(tool) {
   else if (tool.prof === 'wheel') body = '<circle cx="28" cy="16" r="10" fill="currentColor" opacity=".85"/><rect x="0" y="3" width="20" height="5" rx="2.5" transform="rotate(25 10 5)" fill="currentColor" opacity=".55"/>';
   else if (tool.prof === 'wire') body = '<path d="M6 22 Q24 2 42 22" fill="none" stroke="currentColor" stroke-width="2.4"/><line x1="6" y1="22" x2="42" y2="22" stroke="currentColor" stroke-width="1"/>';
   else if (tool.prof === 'shaver') body = '<rect x="24" y="19" width="16" height="4" rx="1.5" fill="currentColor"/><line x1="26" y1="19" x2="12" y2="8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
+  else if (tool.prof === 'vgouge') body = '<path d="M26 18 L32 25 L38 18" fill="none" stroke="currentColor" stroke-width="3"/><line x1="28" y1="17" x2="12" y2="7" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
+  else if (tool.prof === 'chisel') body = '<rect x="26" y="18" width="14" height="5" rx="1" fill="currentColor"/><line x1="28" y1="18" x2="12" y2="7" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
+  else if (tool.prof === 'scraper') body = '<rect x="14" y="6" width="20" height="18" rx="2" fill="currentColor" opacity=".8" transform="rotate(-12 24 15)"/>';
+  else if (tool.prof === 'drawknife') body = '<rect x="10" y="17" width="28" height="5" rx="1.5" fill="currentColor"/><line x1="10" y1="19" x2="3" y2="8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><line x1="38" y1="19" x2="45" y2="8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
   else if (tool.prof === 'gouge') body = '<path d="M26 20 Q32 26 38 20" fill="none" stroke="currentColor" stroke-width="3"/><line x1="28" y1="18" x2="12" y2="8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>';
   else body = `<path d="${P}" fill="currentColor" opacity=".85"/>`;
   const h = handle ? '<rect x="-2" y="14" width="12" height="6" rx="3" fill="currentColor" opacity=".55" transform="translate(-6 0)"/>' : '';

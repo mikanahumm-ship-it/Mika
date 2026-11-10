@@ -147,6 +147,11 @@ export function patColor(surf, x, y, z, out = new THREE.Color()) {
       out.multiplyScalar(0.92 + 0.14 * fbm(x * 8, y * 8, z * 8));
       break;
     }
+    case 15: {
+      const k = Math.floor((y - c.ce.y) * s) + Math.floor((z - c.ce.z) * s) + (P[0] > 0.5 ? Math.floor((x - c.ce.x) * s) : 0);
+      out.copy(((k % 2) + 2) % 2 < 1 ? c1 : c2).multiplyScalar(0.95 + 0.08 * fbm(x * 10, y * 10, z * 10));
+      break;
+    }
   }
   return out;
 }
