@@ -369,7 +369,8 @@ export function installLive(Game, helpers) {
       const size = (tool.cube || 0.07) * (ui.widthScale || 1);
       const back = t.clone().negate();
       let made = 0;
-      for (const r of removed) made += this.dice.addFromPart(r.b, r.part, size, back, r.b.def);
+      for (const r of removed) this.dice.queuePart(r.b, r.part, size, back, r.b.def);
+      made = Math.round(removed.reduce((a, r) => a + r.part.massProps().V, 0) / (size * size * size));
       s.diced = (s.diced || 0) + made;
       s.chop = (s.chop || 0) + A.distanceTo(B);
       if (s.chop > 0.09) { s.chop = 0; this.audio.chop(body0.def.snd, made); }

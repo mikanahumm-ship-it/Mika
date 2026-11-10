@@ -217,6 +217,12 @@ export class Game {
     this.resize();
     window.addEventListener('resize', () => this.resize());
     this.clock = new THREE.Clock();
+    this.renderer.compile(this.scene, this.camera); // particles, cubes, board: no compile hitch later
+    // particles and cubes start empty, so draw one of each once to finish their shaders
+    const pools = Object.values(this.particles.pools).map(P => P.mesh);
+    for (const m of [...pools, this.dice.mesh]) { m.count = 1; m.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, -2, 0)); m.instanceMatrix.needsUpdate = true; }
+    this.warmDraw(new THREE.Group());
+    for (const m of [...pools, this.dice.mesh]) m.count = 0;
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
@@ -234,17 +240,15 @@ export class Game {
   adaptQuality(rdt) {
     this.ft = this.ft ? this.ft * 0.95 + rdt * 0.05 : rdt;
     this.qT = (this.qT || 0) + rdt;
-    if (this.qT < 1) return;
+    // resizing the canvas is expensive: only adapt every few seconds, and never mid-action
+    if (this.qT < 3 || this.stroke || this.sq || (this.dice && this.dice.awake > 0)) return;
     this.qT = 0;
     let pr = this.pr;
-    if (this.ft > 1 / 42 && pr > 0.7) pr = Math.max(0.7, pr - 0.15);
-    else if (this.ft < 1 / 57 && pr < this.prCap) pr = Math.min(this.prCap, pr + 0.1);
+    // only step down, at most twice: every resize costs a visible hitch
+    if (this.ft > 1 / 42 && pr > 0.75 && (this.prSteps || 0) < 2) { pr = Math.max(0.75, pr - 0.2); this.prSteps = (this.prSteps || 0) + 1; }
     if (pr !== this.pr) { this.pr = pr; this.renderer.setPixelRatio(pr); this.resize(); }
-    // still too slow at minimum resolution: drop the shadows
-    if (this.sun) {
-      if (this.ft > 1 / 40 && pr <= 0.75) this.sun.castShadow = false;
-      else if (this.ft < 1 / 55 && pr > 0.95) this.sun.castShadow = true;
-    }
+    // Note: shadows are never switched at runtime: changing the light setup
+    // makes every shader recompile, which freezes the game for a moment.
   }
 
   buildBoard() {
@@ -306,12 +310,52 @@ export class Game {
     this.undoStack = [];
     const parts = makeParts(def.shape), part = parts[0];
     this.addBody(def, parts, new THREE.Vector3(0, drop ? 0.35 : 0.002, 0), new THREE.Quaternion());
+    this.prewarm(def);
     if (drop) setTimeout(() => { this.audio.tick(0.22); this.wobbleAll(0.5); }, 170);
     const bb = part.bounds(); const size = Math.max(bb.mx[0] - bb.mn[0], bb.mx[1] - bb.mn[1], bb.mx[2] - bb.mn[2]);
     this.audio.objPitch = THREE.MathUtils.clamp(2.2 / size, 0.8, 1.35);
     this.camGoal.target = new THREE.Vector3(0, 0.35, 0);
     this.ui.onObject(def, 1);
     this.savePrefs();
+  }
+  // Compile every shader variant this object can need (pieces, cut faces,
+  // shavings, chunks) right away, so no cut ever waits for a shader compile.
+  prewarm(def) {
+    this.warm = this.warm || new Map();
+    if (this.warm.has(def.id)) return;
+    const shared = { wob: { value: 0 }, time: this.time, base: { value: 0 }, height: { value: 1 } };
+    const mats = [...bodyMaterials(def, shared), makeMaterial(def.out, def.mat, shared, { mpos: true, double: true }), makeMaterial(def.in, def.mat, shared, { mpos: true, double: true })];
+    const g = new THREE.Group(), geo = new THREE.BoxGeometry(0.01, 0.01, 0.01);
+    geo.setAttribute('mpos', geo.attributes.position.clone());
+    // both shadow-receiving variants (pieces receive shadows, shavings don't)
+    for (const m of mats) for (const rs of [true, false]) { const mesh = new THREE.Mesh(geo, m); mesh.castShadow = true; mesh.receiveShadow = rs; g.add(mesh); }
+    this.warmDraw(g);
+    this.warm.set(def.id, mats); // keep them alive so their programs stay cached
+    if (this.warm.size > 24) { const [k, ms] = this.warm.entries().next().value; ms.forEach(m => m.dispose()); this.warm.delete(k); }
+  }
+  // Really draw `obj` once into a tiny offscreen target (plus its shadow pass),
+  // so drivers that compile shaders lazily do it now instead of mid-cut.
+  warmDraw(obj, inPlace = false) {
+    try {
+      const r = this.renderer;
+      const parent = obj.parent, pos = obj.position.clone();
+      if (!inPlace) this.scene.add(obj);
+      obj.position.copy(this.cam.target);
+      // never let frustum culling skip the warm-up draw (e.g. before the camera is placed)
+      const culled = [];
+      obj.traverse(o => { if (o.isMesh) { culled.push([o, o.frustumCulled]); o.frustumCulled = false; } });
+      this.camera.updateMatrixWorld();
+      // draw into a single on-screen pixel (same output format as the real
+      // frame, so it compiles exactly the shaders the game will use)
+      const vp = r.getViewport(new THREE.Vector4()), sc = r.getScissor(new THREE.Vector4()), st = r.getScissorTest();
+      r.setViewport(0, 0, 1, 1); r.setScissor(0, 0, 1, 1); r.setScissorTest(true);
+      r.shadowMap.needsUpdate = true;
+      r.render(this.scene, this.camera);
+      r.setViewport(vp); r.setScissor(sc); r.setScissorTest(st);
+      for (const [o, f] of culled) o.frustumCulled = f;
+      obj.position.copy(pos);
+      if (!inPlace) { this.scene.remove(obj); if (parent) parent.add(obj); }
+    } catch { /* best effort */ }
   }
   reset() { if (this.current) { this.spawn(this.current.id); this.audio.ui(); } }
 
@@ -826,6 +870,8 @@ export class Game {
     this.knife = buildToolModel(this.tool, this.finish, this.handle, { width: (this.tool.width || 0) * (this.ui.widthScale || 1), env: this.scene.environment });
     this.knife.visible = false; this.knife.traverse(o => { o.castShadow = true; });
     this.scene.add(this.knife);
+    // compile the tool's shaders now, not on the first frame of the first cut
+    this.knife.visible = true; this.warmDraw(this.knife, true); this.knife.visible = false;
     this.savePrefs();
   }
   updateTrail() {

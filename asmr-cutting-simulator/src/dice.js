@@ -60,9 +60,9 @@ export class Dice {
     this.impacts = [];
     this.lo = Infinity; this.hi = -1;
   }
-  clear() { this.n = 0; this.mesh.count = 0; this.awake = 0; this.mats = []; this.maxS = 0.08; }
+  clear() { this.queue = []; this.n = 0; this.mesh.count = 0; this.awake = 0; this.mats = []; this.maxS = 0.08; }
   get count() { return this.n; }
-  truncate(n) { if (n < this.n) { this.n = n; this.mesh.count = n; } }
+  truncate(n) { this.queue = []; if (n < this.n) { this.n = n; this.mesh.count = n; } }
   matIndex(def) {
     let i = this.mats.findIndex(m => m.def === def);
     if (i < 0) { i = this.mats.length; this.mats.push({ def, ...cubeMaterial(def) }); }
@@ -72,6 +72,19 @@ export class Dice {
 
   // Voxelise a removed convex part of `body`: one cube per grid cell whose
   // centre lies inside it. `push` = direction the cubes are flung toward.
+  // Queue removed material for voxelising; a fast swipe spreads its cubes over
+  // a few frames instead of creating thousands in one frame.
+  queuePart(body, part, size, push, def) {
+    (this.queue || (this.queue = [])).push({ part, size, push: push.clone(), def, m: body.mesh.matrixWorld.clone(), q: body.mesh.quaternion.clone() });
+  }
+  drainQueue(budget = 450) {
+    let made = 0;
+    while (this.queue && this.queue.length && made < budget) {
+      const j = this.queue.shift();
+      made += this.addFromPart({ mesh: { matrixWorld: j.m, quaternion: j.q } }, j.part, j.size, j.push, j.def);
+    }
+    return made;
+  }
   addFromPart(body, part, size, push, def) {
     this.prof = def.snd;
     let planes = part._planes;
@@ -193,6 +206,7 @@ export class Dice {
 
   update(dt) {
     this.gridFresh = false;
+    this.drainQueue();
     if (!this.n) return;
     let anyAwake = false;
     for (let i = 0; i < this.n; i++) if (this.state[i] === 1 || this.jig[i] > 0.002) { anyAwake = true; break; }
@@ -308,7 +322,7 @@ export class Dice {
         I.identity();
         W[i * 3] *= 1 - 8 * dt; W[i * 3 + 1] *= 1 - 8 * dt; W[i * 3 + 2] *= 1 - 8 * dt;
         this.still[i] += dt;
-        if ((this.still[i] > 0.2 && speed < 0.35) || this.age[i] > 4) { this.state[i] = 2; V[i * 3] = V[i * 3 + 1] = V[i * 3 + 2] = 0; W[i * 3] = W[i * 3 + 1] = W[i * 3 + 2] = 0; }
+        if ((this.still[i] > (this.awake > 1500 ? 0.06 : 0.2) && speed < 0.35) || this.age[i] > (this.awake > 1500 ? 2 : 4)) { this.state[i] = 2; V[i * 3] = V[i * 3 + 1] = V[i * 3 + 2] = 0; W[i * 3] = W[i * 3 + 1] = W[i * 3 + 2] = 0; }
       } else this.still[i] = 0;
       if (P[i * 3 + 1] < -3) this.state[i] = 0;
       Q[i * 4] = _q.x; Q[i * 4 + 1] = _q.y; Q[i * 4 + 2] = _q.z; Q[i * 4 + 3] = _q.w;
