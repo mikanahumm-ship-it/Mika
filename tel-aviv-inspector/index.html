@@ -146,7 +146,7 @@ body.touch #mission { top: auto; bottom: calc(var(--sab) + 210px); right: max(12
 .who small { display: block; color: var(--muted); font-size: 12px; font-weight: 600; }
 .chip { display: inline-block; background: var(--red); color: #fff; font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 8px; margin-inline-start: 6px; vertical-align: middle; }
 .meters { display: grid; gap: 4px; min-width: 150px; }
-.m { display: grid; grid-template-columns: 52px 1fr 26px; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; position: relative; }
+.m { display: grid; grid-template-columns: minmax(52px, auto) 1fr 26px; white-space: nowrap; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; position: relative; }
 .m .bar { height: 10px; border-radius: 6px; background: #e8e1d4; overflow: hidden; }
 .m .bar i { display: block; height: 100%; transition: width .5s cubic-bezier(.3,1.4,.6,1); margin-right: auto; }
 #m-anger { background: linear-gradient(90deg, #f28a1d, var(--red)); }
@@ -211,6 +211,28 @@ body.touch .opt .key { display: none; }
 #ach-list span.got { background: #fff3c9; color: var(--ink); filter: none; font-weight: 700; }
 #reset-confirm { background: #ffe9e6; border-radius: 12px; padding: 10px; font-size: 14px; display: grid; gap: 8px; }
 
+#stars { font-size: 28px; letter-spacing: 2px; color: var(--sun); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; animation: pulse .5s infinite alternate; direction: ltr; }
+.meter.cops { background: #16326e; color: #fff; animation: sirenBg .5s infinite alternate; }
+.meter.cops .bar { background: rgba(255,255,255,.25); } .meter.cops .bar i { background: #fff; }
+@keyframes sirenBg { from { box-shadow: 0 0 0 3px #ff2a2a; } to { box-shadow: 0 0 0 3px #2a6bff; } }
+.bubble.cop { background: #16326e; color: #fff; border-color: #16326e; font-weight: 900; }
+#speedfx { position: fixed; inset: 0; pointer-events: none; z-index: 8; opacity: 0; transition: opacity .25s;
+  background: repeating-conic-gradient(from 0deg at 50% 55%, rgba(255,255,255,0) 0deg 4deg, rgba(255,255,255,.22) 4.4deg 5deg);
+  -webkit-mask-image: radial-gradient(circle at 50% 55%, transparent 32%, #000 75%); mask-image: radial-gradient(circle at 50% 55%, transparent 32%, #000 75%); }
+body.boost #speedfx { opacity: 1; animation: whoosh .12s linear infinite; }
+@keyframes whoosh { to { transform: scale(1.03); } }
+#arrest { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; background: #0d1020; animation: sirenFlash .5s infinite alternate; padding: 16px; }
+@keyframes sirenFlash { from { background: radial-gradient(circle at 20% 30%, rgba(255,40,40,.55), #0d1020 60%); } to { background: radial-gradient(circle at 80% 30%, rgba(40,100,255,.55), #0d1020 60%); } }
+.arrest-card { text-align: center; color: #fff; max-width: 520px; }
+.arrest-card .cuffs { font-size: 64px; animation: pulse .4s infinite alternate; }
+.arrest-card h2 { font: 400 clamp(40px, 9vw, 72px) var(--f-display); margin: 6px 0; color: var(--sun); -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; }
+.arrest-card p { font-size: 18px; font-weight: 600; line-height: 1.5; }
+#jail { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; background: #3b3f48; padding: 16px; overflow: hidden; }
+#jail .bars { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 7vw, #1d1f25 7vw calc(7vw + 18px)); box-shadow: inset 0 0 120px rgba(0,0,0,.7); }
+.jail-card { position: relative; background: var(--paper); border-radius: 18px; padding: 20px; width: min(440px, 100%); text-align: center; display: grid; gap: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.jail-card h2 { margin: 0; font: 400 28px var(--f-display); }
+#jail-day { font: 900 34px var(--f-body); color: var(--red); font-variant-numeric: tabular-nums; }
+#jail-line { font-size: 17px; font-weight: 600; min-height: 3em; margin: 0; }
 @media (max-width: 600px) {
   #minimap { width: 104px; height: 104px; border-width: 3px; }
   .wallet b { font-size: 19px; } .wallet { min-width: 86px; }
@@ -239,6 +261,7 @@ body.touch .opt .key { display: none; }
 <body>
 <div id="game"></div>
 <div id="bubbles"></div>
+<div id="speedfx"></div>
 <div id="loading">בונים את דיזנגוף… 🏗️</div>
 
 <section id="title" hidden>
@@ -269,6 +292,7 @@ body.touch .opt .key { display: none; }
   </div>
   <div class="center-top">
     <div id="area"></div>
+    <div id="stars" hidden></div>
     <div class="meter" id="sus" hidden><span id="sus-label"></span><div class="bar"><i id="sus-fill"></i></div></div>
   </div>
   <div class="pill" id="mission"></div>
@@ -298,8 +322,8 @@ body.touch .opt .key { display: none; }
       <div id="dlg-face">😐</div>
       <div class="who"><b id="dlg-name"></b><span class="chip" id="dlg-viol"></span><small><span id="dlg-pers"></span> · <span id="dlg-meet"></span> · <span class="pat">סבלנות <span id="dlg-pat"></span></span></small></div>
       <div class="meters">
-        <div class="m" id="m-anger-box"><span>😡 עצבים</span><div class="bar"><i id="m-anger"></i></div><b id="m-anger-v">0</b></div>
-        <div class="m" id="m-trust-box"><span>🤝 אמון</span><div class="bar"><i id="m-trust"></i></div><b id="m-trust-v">0</b></div>
+        <div class="m" id="m-anger-box"><span id="m-a-lbl">😡 עצבים</span><div class="bar"><i id="m-anger"></i></div><b id="m-anger-v">0</b></div>
+        <div class="m" id="m-trust-box"><span id="m-t-lbl">🤝 אמון</span><div class="bar"><i id="m-trust"></i></div><b id="m-trust-v">0</b></div>
       </div>
     </div>
     <div id="dlg-insp"></div>
@@ -308,6 +332,7 @@ body.touch .opt .key { display: none; }
     <div id="dlg-actions" hidden>
       <button class="btn ghost small" id="pay">🧾 לשלם ולגמור עם זה</button>
       <button class="btn ghost small" id="run">🏃 לנסות לברוח</button>
+      <button class="btn ghost small" id="refuse">🚔 לא משלמת! שיזמין משטרה</button>
     </div>
   </div>
 </div>
@@ -317,6 +342,15 @@ body.touch .opt .key { display: none; }
     <div id="result-card" class="ticket"></div>
     <button class="btn sun" id="result-btn">חזרה לרכיבה</button>
   </div>
+</div>
+
+<div id="arrest" hidden>
+  <div class="arrest-card"><div class="cuffs">🚔</div><h2 id="arrest-t">🚔 נעצרת!</h2><p id="arrest-sub"></p></div>
+</div>
+
+<div id="jail" hidden>
+  <div class="bars"></div>
+  <div class="jail-card"><h2>🔒 כלא מעשיהו (בערך)</h2><b id="jail-day"></b><p id="jail-line"></p><button class="btn sun" id="jail-btn" hidden>לצאת לחופשי</button></div>
 </div>
 
 <div id="shop" class="panel" hidden>
@@ -351,6 +385,8 @@ body.touch .opt .key { display: none; }
 <script src="js/actors.js"></script>
 <script src="js/inspectors.js"></script>
 <script src="js/dialogue.js"></script>
+<script src="js/police.js"></script>
+<script src="js/legal.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

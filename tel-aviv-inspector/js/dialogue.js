@@ -34,6 +34,7 @@ function startDialogue(insp, viol, ctx) {
   open += GI(VIOL[viol].open[insp.pers], insp.g);
   if (D.fled) open += ' ' + GI(FLED[insp.pers], insp.g);
   $('#dlg').hidden = false; $('#hud').classList.add('dim');
+  $('#refuse').textContent = G('🚔 לא משלם{{|ת}}! שיזמין משטרה');
   $('#dlg-name').textContent = insp.name;
   $('#dlg-pers').textContent = PERS[insp.pers].label;
   $('#dlg-viol').textContent = VIOL[viol].name + (D.fled ? ' + בריחה מפקח' : '');
@@ -164,7 +165,10 @@ function floatDelta(dt, da) {
 
 function checkEnd() {
   const P = PERS[D.pers];
-  if (D.anger >= 100) return endDialogue('fine', END.rage, { rage: true });
+  if (D.anger >= 100) {
+    if ((D.fled || D.flags.ranFail || D.argues >= 3) && Math.random() < 0.45) return endDialogue('fine', 'זהו! נגמר! אני מזמין משטרה!', { police: true });
+    return endDialogue('fine', END.rage, { rage: true });
+  }
   if (D.fluster >= 2) return endDialogue('warning', END.flusterWarn);
   if (D.trust >= 85 && D.anger < 70) return endDialogue('warning');
   if (D.round >= P.patience && !D.node) {
@@ -185,7 +189,7 @@ function payNow() {
 function tryRun() {
   if (!D || D.busy) return; D.busy = true; SFX.click();
   $('#dlg-opts').innerHTML = ''; $('#dlg-actions').hidden = true;
-  const chance = { rookie: 0.55, nice: 0.45, cynic: 0.35, angry: 0.3, veteran: 0.2 }[D.pers];
+  const chance = { rookie: 0.68, nice: 0.58, cynic: 0.48, angry: 0.42, veteran: 0.32 }[D.pers];
   if (Math.random() < chance) {
     const insp = D.insp;
     closeDialogue();
@@ -203,7 +207,10 @@ function endDialogue(outcome, line, o) {
   o = o || {}; D.busy = true;
   $('#dlg-opts').innerHTML = ''; $('#dlg-actions').hidden = true;
   const text = GI(G(line ? line : END[outcome][D.pers]), D.insp.g);
-  inspSay(text, () => setTimeout(() => showResult(outcome, o), 1200));
+  inspSay(text, () => setTimeout(() => {
+    if (o.police) { POLICE.crimes.insult++; D.mem.meet++; D.mem.claims = Array.from(new Set(D.mem.claims.concat(D.claims))).slice(-12); saveGame(); startArrest('insult'); return; }
+    showResult(outcome, o);
+  }, 1200));
 }
 
 function satireNotes(o) {
@@ -277,4 +284,14 @@ function resultContinue() {
   D = null; closeDialogue();
   PLAYER.viol.redT = 0; PLAYER.viol.dangerT = 0; PLAYER.chaseTopSpeed = 0;
   GAME.flash(G('יאללה, {{תמשיך|תמשיכי}} לרכוב. בזהירות הפעם 😉'));
+}
+
+function refuseFine() {
+  if (!D || D.busy) return; D.busy = true; SFX.click();
+  $('#dlg-opts').innerHTML = ''; $('#dlg-actions').hidden = true;
+  const line = G('לא משלם{{|ת}} כלום! {{תזמין|תזמין}} משטרה אם אתה רוצה!');
+  $('#dlg-player').hidden = false; $('#dlg-player').textContent = line;
+  say(PLAYER.rider.head, line, 2.4, 'me');
+  const mem = D.mem; mem.meet++; mem.claims = Array.from(new Set(mem.claims.concat(D.claims))).slice(-12); saveGame();
+  setTimeout(() => inspSay(GI(G(pick(['אה, ככה? בבקשה. מוקד, צריך ניידת לפה!', 'יופי. {{תסביר|תסבירי}} את זה לשוטרים.', 'אתה רוצה משטרה? קיבלת משטרה.'])), D.insp.g), () => setTimeout(() => { POLICE.crimes.refuse++; startArrest('refuse'); }, 900)), 600);
 }
